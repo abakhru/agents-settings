@@ -398,6 +398,17 @@ discord-setup token="" guild="":
                 print("  2. Token is a Bot token, not a user token")
             sys.exit(1)
 
+    # Validate token and get bot's client ID
+    me = api("GET", "/users/@me")
+    client_id = me["id"]
+    print(f"Bot: {me['username']} (id: {client_id})")
+
+    # Print invite URL — open this if bot isn't in the server yet
+    perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS
+    invite = f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot&permissions={perms}"
+    print(f"Invite URL (open if bot not in server): {invite}")
+    print()
+
     print(f"Fetching channels for guild {guild} ...")
     all_channels = {c["name"]: c["id"] for c in api("GET", f"/guilds/{guild}/channels") if c["type"] == 0}
 
