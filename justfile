@@ -337,122 +337,102 @@ notify-done id:
 #   Bot token  → discord.com/developers/applications → your app → Bot → Reset Token
 #   Guild ID   → Discord: right-click your server → Copy Server ID (enable Developer Mode first)
 discord-setup token="" guild="":
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/usr/bin/env python3
+    import os, sys, json, urllib.request, urllib.error
 
-    TOKEN="${token:-${DISCORD_BOT_TOKEN:-}}"
-    GUILD="${guild:-${DISCORD_GUILD_ID:-}}"
+    token = "{{token}}" or os.environ.get("DISCORD_BOT_TOKEN", "")
+    guild = "{{guild}}" or os.environ.get("DISCORD_GUILD_ID", "")
+    cfg   = "{{discord_config}}"
 
-    if [ -z "$TOKEN" ] || [ -z "$GUILD" ]; then
-        echo "{{r}}✗{{n}} Missing credentials."
-        echo ""
-        echo "Usage:"
-        echo "  DISCORD_BOT_TOKEN=xxx DISCORD_GUILD_ID=yyy just discord-setup"
-        echo "  just discord-setup token=xxx guild=yyy"
-        echo ""
-        echo "Bot token  → discord.com/developers/applications → your app → Bot → Reset Token"
-        echo "Guild ID   → Discord: right-click server → Copy Server ID (enable Developer Mode)"
-        exit 1
-    fi
+    if not token or not guild:
+        print("✗ Missing credentials.\n")
+        print("Usage:")
+        print("  DISCORD_BOT_TOKEN=xxx DISCORD_GUILD_ID=yyy just discord-setup")
+        print("  just discord-setup token=xxx guild=yyy\n")
+        print("Bot token → discord.com/developers/applications → your app → Bot → Reset Token")
+        print("Guild ID  → Discord: right-click server → Copy Server ID (Developer Mode)")
+        sys.exit(1)
 
-    API="https://discord.com/api/v10"
-    HDR="Authorization: Bot $TOKEN"
+    API  = "https://discord.com/api/v10"
+    HDR  = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
 
-    # Verify bot access
-    echo "Fetching channels for guild $GUILD ..."
-    response=$(curl -s -w "\n%{http_code}" -H "$HDR" "$API/guilds/$GUILD/channels")
-    http_code=$(echo "$response" | tail -1)
-    channels=$(echo "$response" | head -n -1)
+    CHANNELS = {
+        "updates":           "DISCORD_WEBHOOK_UPDATES",
+        "alerts":            "DISCORD_WEBHOOK_ALERTS",
+        "pm":                "DISCORD_WEBHOOK_PM",
+        "design":            "DISCORD_WEBHOOK_DESIGN",
+        "exploration":       "DISCORD_WEBHOOK_EXPLORATION",
+        "engineering":       "DISCORD_WEBHOOK_ENGINEERING",
+        "qa-strategy":       "DISCORD_WEBHOOK_QA_STRATEGY",
+        "qa-implementation": "DISCORD_WEBHOOK_QA_IMPLEMENTATION",
+        "security":          "DISCORD_WEBHOOK_SECURITY",
+        "performance":       "DISCORD_WEBHOOK_PERFORMANCE",
+        "decisions":         "DISCORD_WEBHOOK_DECISIONS",
+        "cicd":              "DISCORD_WEBHOOK_CICD",
+    }
 
-    if [ "$http_code" != "200" ]; then
-        echo "{{r}}✗{{n}} API returned HTTP $http_code"
-        echo ""
-        echo "Response: $channels"
-        echo ""
-        echo "Common causes:"
-        echo "  401 — invalid bot token (regenerate at discord.com/developers)"
-        echo "  403 — bot not in server, or missing permissions"
-        echo "  404 — wrong guild ID"
-        echo ""
-        echo "Checklist:"
-        echo "  1. Bot is invited to your server (OAuth2 → URL Generator → bot scope + Manage Webhooks)"
-        echo "  2. Token starts with the bot's client ID (not a user token)"
-        echo "  3. Guild ID copied with Developer Mode enabled (Settings → Advanced)"
-        exit 1
-    fi
+    def api(method, path, body=None):
+        req = urllib.request.Request(f"{API}{path}", headers=HDR, method=method,
+                                     data=json.dumps(body).encode() if body else None)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            detail = json.loads(e.read())
+            hints = {401: "invalid token", 403: "bot not in server or missing Manage Webhooks",
+                     404: "wrong guild ID"}
+            print(f"✗ HTTP {e.code} — {hints.get(e.code, e.reason)}")
+            print(f"  Discord says: {detail.get('message', detail)}")
+            if e.code in (401, 403):
+                print("\nChecklist:")
+                print("  1. Invite bot via OAuth2 → URL Generator (scope: bot, perm: Manage Webhooks)")
+                print("  2. Token is a Bot token, not a user token")
+            sys.exit(1)
 
-    # Channel name → env var mapping
-    declare -A MAPPING=(
-        ["updates"]="DISCORD_WEBHOOK_UPDATES"
-        ["alerts"]="DISCORD_WEBHOOK_ALERTS"
-        ["pm"]="DISCORD_WEBHOOK_PM"
-        ["design"]="DISCORD_WEBHOOK_DESIGN"
-        ["exploration"]="DISCORD_WEBHOOK_EXPLORATION"
-        ["engineering"]="DISCORD_WEBHOOK_ENGINEERING"
-        ["qa-strategy"]="DISCORD_WEBHOOK_QA_STRATEGY"
-        ["qa-implementation"]="DISCORD_WEBHOOK_QA_IMPLEMENTATION"
-        ["security"]="DISCORD_WEBHOOK_SECURITY"
-        ["performance"]="DISCORD_WEBHOOK_PERFORMANCE"
-        ["decisions"]="DISCORD_WEBHOOK_DECISIONS"
-        ["cicd"]="DISCORD_WEBHOOK_CICD"
-    )
+    print(f"Fetching channels for guild {guild} ...")
+    all_channels = {c["name"]: c["id"] for c in api("GET", f"/guilds/{guild}/channels") if c["type"] == 0}
 
-    declare -A RESULTS
-
-    for channel_name in "${!MAPPING[@]}"; do
-        var="${MAPPING[$channel_name]}"
-
-        # Find channel ID by name (type 0 = text channel)
-        channel_id=$(echo "$channels" | jq -r --arg name "$channel_name" \
-            '.[] | select(.type == 0 and .name == $name) | .id' | head -1)
-
-        if [ -z "$channel_id" ]; then
-            echo "{{y}}⚠{{n}}  channel #$channel_name not found — skipping $var"
-            RESULTS[$var]=""
+    results = {}
+    for name, var in CHANNELS.items():
+        if name not in all_channels:
+            print(f"  ⚠  #{name} not found — skipping {var}")
+            results[var] = ""
             continue
-        fi
+        wh = api("POST", f"/channels/{all_channels[name]}/webhooks", {"name": "amit-ai-team"})
+        url = f"https://discord.com/api/webhooks/{wh['id']}/{wh['token']}"
+        results[var] = url
+        print(f"  ✓  #{name}")
 
-        # Create webhook
-        response=$(curl -sf -X POST -H "$HDR" -H "Content-Type: application/json" \
-            -d "{\"name\":\"amit-ai-team\"}" \
-            "$API/channels/$channel_id/webhooks" 2>&1) || {
-            echo "{{r}}✗{{n}}  failed to create webhook for #$channel_name"
-            RESULTS[$var]=""
-            continue
-        }
+    lines = [
+        "# Discord Webhook Configuration — generated by just discord-setup",
+        "# DO NOT COMMIT — this file is gitignored.",
+        "",
+        'DISCORD_USERNAME="amit-ai-team"',
+        "DISCORD_AVATAR_URL=",
+        "",
+        "# Activity",
+        f"DISCORD_WEBHOOK_UPDATES={results['DISCORD_WEBHOOK_UPDATES']}",
+        f"DISCORD_WEBHOOK_ALERTS={results['DISCORD_WEBHOOK_ALERTS']}",
+        "",
+        "# Specialist",
+        f"DISCORD_WEBHOOK_PM={results['DISCORD_WEBHOOK_PM']}",
+        f"DISCORD_WEBHOOK_DESIGN={results['DISCORD_WEBHOOK_DESIGN']}",
+        f"DISCORD_WEBHOOK_EXPLORATION={results['DISCORD_WEBHOOK_EXPLORATION']}",
+        f"DISCORD_WEBHOOK_ENGINEERING={results['DISCORD_WEBHOOK_ENGINEERING']}",
+        f"DISCORD_WEBHOOK_QA_STRATEGY={results['DISCORD_WEBHOOK_QA_STRATEGY']}",
+        f"DISCORD_WEBHOOK_QA_IMPLEMENTATION={results['DISCORD_WEBHOOK_QA_IMPLEMENTATION']}",
+        f"DISCORD_WEBHOOK_SECURITY={results['DISCORD_WEBHOOK_SECURITY']}",
+        f"DISCORD_WEBHOOK_PERFORMANCE={results['DISCORD_WEBHOOK_PERFORMANCE']}",
+        "",
+        "# Process",
+        f"DISCORD_WEBHOOK_DECISIONS={results['DISCORD_WEBHOOK_DECISIONS']}",
+        f"DISCORD_WEBHOOK_CICD={results['DISCORD_WEBHOOK_CICD']}",
+    ]
+    with open(cfg, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
-        url=$(echo "$response" | jq -r '"https://discord.com/api/webhooks/" + .id + "/" + .token')
-        RESULTS[$var]="$url"
-        echo "{{g}}✓{{n}}  #$channel_name → $var"
-    done
-
-    # Write config/discord.env
-    cfg="{{discord_config}}"
-    {
-        printf '# Discord Webhook Configuration — generated by just discord-setup\n'
-        printf '# DO NOT COMMIT — this file is gitignored.\n\n'
-        printf 'DISCORD_USERNAME="amit-ai-team"\n'
-        printf 'DISCORD_AVATAR_URL=\n\n'
-        printf '# Activity\n'
-        printf 'DISCORD_WEBHOOK_UPDATES=%s\n'         "${RESULTS[DISCORD_WEBHOOK_UPDATES]}"
-        printf 'DISCORD_WEBHOOK_ALERTS=%s\n\n'        "${RESULTS[DISCORD_WEBHOOK_ALERTS]}"
-        printf '# Specialist\n'
-        printf 'DISCORD_WEBHOOK_PM=%s\n'              "${RESULTS[DISCORD_WEBHOOK_PM]}"
-        printf 'DISCORD_WEBHOOK_DESIGN=%s\n'          "${RESULTS[DISCORD_WEBHOOK_DESIGN]}"
-        printf 'DISCORD_WEBHOOK_EXPLORATION=%s\n'     "${RESULTS[DISCORD_WEBHOOK_EXPLORATION]}"
-        printf 'DISCORD_WEBHOOK_ENGINEERING=%s\n'     "${RESULTS[DISCORD_WEBHOOK_ENGINEERING]}"
-        printf 'DISCORD_WEBHOOK_QA_STRATEGY=%s\n'     "${RESULTS[DISCORD_WEBHOOK_QA_STRATEGY]}"
-        printf 'DISCORD_WEBHOOK_QA_IMPLEMENTATION=%s\n' "${RESULTS[DISCORD_WEBHOOK_QA_IMPLEMENTATION]}"
-        printf 'DISCORD_WEBHOOK_SECURITY=%s\n'        "${RESULTS[DISCORD_WEBHOOK_SECURITY]}"
-        printf 'DISCORD_WEBHOOK_PERFORMANCE=%s\n\n'   "${RESULTS[DISCORD_WEBHOOK_PERFORMANCE]}"
-        printf '# Process\n'
-        printf 'DISCORD_WEBHOOK_DECISIONS=%s\n'       "${RESULTS[DISCORD_WEBHOOK_DECISIONS]}"
-        printf 'DISCORD_WEBHOOK_CICD=%s\n'            "${RESULTS[DISCORD_WEBHOOK_CICD]}"
-    } > "$cfg"
-
-    echo ""
-    echo "{{g}}Done.{{n}} Written to $cfg"
-    echo "Run 'just discord-status' to verify."
+    print(f"\n✓ Written to {cfg}")
+    print("Run 'just discord-status' to verify.")
 
 # Show Discord config status
 discord-status:
