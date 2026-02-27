@@ -384,18 +384,23 @@ discord-setup token="" guild="":
             sys.exit(1)
         except urllib.error.HTTPError as e:
             raw = e.read()
-            hints = {401: "invalid token", 403: "bot not in server or missing Manage Webhooks",
-                     404: "wrong guild ID"}
-            print(f"✗ HTTP {e.code} — {hints.get(e.code, e.reason)}")
             try:
                 detail = json.loads(raw)
-                print(f"  Discord says: {detail.get('message', detail)}")
+                code = detail.get("code", "")
+                msg  = detail.get("message", str(detail))
             except json.JSONDecodeError:
-                print(f"  Raw response: {raw[:500]}")
-            if e.code in (401, 403):
-                print("\nChecklist:")
-                print("  1. Invite bot via OAuth2 → URL Generator (scope: bot, perm: Manage Webhooks)")
-                print("  2. Token is a Bot token, not a user token")
+                code, msg = "", raw[:300]
+
+            print(f"✗ HTTP {e.code} (Discord code: {code}) — {msg}")
+
+            if e.code == 401:
+                print("\n→ Token is invalid. Regenerate at discord.com/developers/applications → Bot → Reset Token")
+            elif e.code == 403 or code in (10004, 1010, 50001):
+                print("\n→ Bot is not in the server (or missing permissions).")
+                print("  Open the invite URL printed above in your browser,")
+                print("  select your server, and click Authorize. Then re-run.")
+            elif e.code == 404:
+                print("\n→ Wrong Guild ID. Right-click your server in Discord → Copy Server ID.")
             sys.exit(1)
 
     # Validate token and get bot's client ID
@@ -403,11 +408,14 @@ discord-setup token="" guild="":
     client_id = me["id"]
     print(f"Bot: {me['username']} (id: {client_id})")
 
-    # Print invite URL — open this if bot isn't in the server yet
-    perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS
+    # Print invite URL — must be opened in browser to add bot to the server
+    perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS = 536871936
     invite = f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot&permissions={perms}"
-    print(f"Invite URL (open if bot not in server): {invite}")
-    print()
+    print(f"\n{'─'*60}")
+    print(f"STEP: Open this URL in your browser to add the bot to your server:")
+    print(f"  {invite}")
+    print(f"{'─'*60}\n")
+    input("Press Enter once the bot is in your server to continue ...")
 
     print(f"Fetching channels for guild {guild} ...")
     all_channels = {c["name"]: c["id"] for c in api("GET", f"/guilds/{guild}/channels") if c["type"] == 0}
