@@ -360,10 +360,26 @@ discord-setup token="" guild="":
 
     # Verify bot access
     echo "Fetching channels for guild $GUILD ..."
-    channels=$(curl -sf -H "$HDR" "$API/guilds/$GUILD/channels" 2>&1) || {
-        echo "{{r}}✗{{n}} API call failed — check your token and guild ID"
+    response=$(curl -s -w "\n%{http_code}" -H "$HDR" "$API/guilds/$GUILD/channels")
+    http_code=$(echo "$response" | tail -1)
+    channels=$(echo "$response" | head -n -1)
+
+    if [ "$http_code" != "200" ]; then
+        echo "{{r}}✗{{n}} API returned HTTP $http_code"
+        echo ""
+        echo "Response: $channels"
+        echo ""
+        echo "Common causes:"
+        echo "  401 — invalid bot token (regenerate at discord.com/developers)"
+        echo "  403 — bot not in server, or missing permissions"
+        echo "  404 — wrong guild ID"
+        echo ""
+        echo "Checklist:"
+        echo "  1. Bot is invited to your server (OAuth2 → URL Generator → bot scope + Manage Webhooks)"
+        echo "  2. Token starts with the bot's client ID (not a user token)"
+        echo "  3. Guild ID copied with Developer Mode enabled (Settings → Advanced)"
         exit 1
-    }
+    fi
 
     # Channel name → env var mapping
     declare -A MAPPING=(
