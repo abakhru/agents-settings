@@ -338,11 +338,17 @@ notify-done id:
 #   Guild ID   → Discord: right-click your server → Copy Server ID (enable Developer Mode first)
 discord-setup token="" guild="":
     #!/usr/bin/env python3
-    import os, sys, json, urllib.request, urllib.error
+    import os, sys
+    from pathlib import Path
+    try:
+        import httpx
+    except ImportError:
+        print("✗ httpx not installed — run: pip install httpx  (or: uv add httpx)")
+        sys.exit(1)
 
     token = "{{token}}" or os.environ.get("DISCORD_BOT_TOKEN", "")
     guild = "{{guild}}" or os.environ.get("DISCORD_GUILD_ID", "")
-    cfg   = "{{discord_config}}"
+    cfg   = Path("{{discord_config}}")
 
     if not token or not guild:
         print("✗ Missing credentials.\n")
@@ -353,8 +359,8 @@ discord-setup token="" guild="":
         print("Guild ID  → Discord: right-click server → Copy Server ID (Developer Mode)")
         sys.exit(1)
 
-    API  = "https://discord.com/api/v10"
-    HDR  = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+    API = "https://discord.com/api/v10"
+    HDR = {"Authorization": f"Bot {token}"}
 
     CHANNELS = {
         "updates":           "DISCORD_WEBHOOK_UPDATES",
@@ -371,79 +377,69 @@ discord-setup token="" guild="":
         "cicd":              "DISCORD_WEBHOOK_CICD",
     }
 
-    def api(method, path, body=None):
-        req = urllib.request.Request(f"{API}{path}", headers=HDR, method=method,
-                                     data=json.dumps(body).encode() if body else None)
-        try:
-            with urllib.request.urlopen(req) as r:
-                raw = r.read()
-                return json.loads(raw)
-        except json.JSONDecodeError:
-            print(f"✗ Discord returned non-JSON for {method} {path}")
-            print(f"  Raw response: {raw[:500]}")
-            sys.exit(1)
-        except urllib.error.HTTPError as e:
-            raw = e.read()
+    def api(client, method, path, **kwargs):
+        r = client.request(method, f"{API}{path}", **kwargs)
+        if not r.is_success:
             try:
-                detail = json.loads(raw)
+                detail = r.json()
                 code = detail.get("code", "")
                 msg  = detail.get("message", str(detail))
-            except json.JSONDecodeError:
-                code, msg = "", raw[:300]
-
-            print(f"✗ HTTP {e.code} (Discord code: {code}) — {msg}")
-
-            if e.code == 401:
-                print("\n→ Token is invalid. Regenerate at discord.com/developers/applications → Bot → Reset Token")
-            elif e.code == 403 or code in (10004, 1010, 50001):
-                print("\n→ Bot is not in the server (or missing permissions).")
-                print("  Open the invite URL printed above in your browser,")
-                print("  select your server, and click Authorize. Then re-run.")
-            elif e.code == 404:
-                print("\n→ Wrong Guild ID. Right-click your server in Discord → Copy Server ID.")
+            except Exception:
+                code, msg = "", r.text[:300]
+            print(f"✗ HTTP {r.status_code} (Discord code: {code}) — {msg}")
+            if r.status_code == 401:
+                print("\n→ Token is invalid. Regenerate at discord.com/developers → Bot → Reset Token")
+            elif r.status_code == 403:
+                print("\n→ Bot is missing permissions or not in this server.")
+                print("  Open the invite URL above, re-authorize, and ensure Manage Webhooks is checked.")
+            elif r.status_code == 404:
+                print("\n→ Wrong Guild ID. Right-click your server → Copy Server ID.")
             sys.exit(1)
+        return r.json()
 
-    # Validate token and get bot's client ID
-    me = api("GET", "/users/@me")
-    client_id = me["id"]
-    print(f"Bot: {me['username']} (id: {client_id})")
+    with httpx.Client(headers=HDR) as client:
+        # Validate token
+        me = api(client, "GET", "/users/@me")
+        client_id = me["id"]
+        print(f"Bot: {me['username']} (id: {client_id})")
 
-    # Print invite URL — must be opened in browser to add bot to the server
-    perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS = 536871936
-    invite = f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot&permissions={perms}"
-    print(f"\n{'─'*60}")
-    print(f"STEP: Open this URL in your browser to add the bot to your server:")
-    print(f"  {invite}")
-    print(f"{'─'*60}\n")
-    input("Press Enter once the bot is in your server to continue ...")
+        # Print invite URL
+        perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS
+        invite = f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot&permissions={perms}"
+        print(f"\n{'─'*60}")
+        print("STEP: Open this URL to add the bot to your server (if not already):")
+        print(f"  {invite}")
+        print(f"{'─'*60}\n")
+        input("Press Enter once the bot is in your server to continue ...")
 
-    # List all guilds the bot is in — helps verify guild ID
-    print("Guilds bot is currently in:")
-    bot_guilds = api("GET", "/users/@me/guilds")
-    for g in bot_guilds:
-        marker = " ← MATCH" if g["id"] == guild else ""
-        print(f"  {g['id']}  {g['name']}{marker}")
-    if not any(g["id"] == guild for g in bot_guilds):
-        print(f"\n✗ Guild ID {guild} not found in bot's guild list above.")
-        print("  Either the bot wasn't fully added, or the Guild ID is wrong.")
-        sys.exit(1)
-    print()
+        # Verify guild membership
+        print("Guilds bot is in:")
+        bot_guilds = api(client, "GET", "/users/@me/guilds")
+        for g in bot_guilds:
+            marker = " ← MATCH" if g["id"] == guild else ""
+            print(f"  {g['id']}  {g['name']}{marker}")
+        if not any(g["id"] == guild for g in bot_guilds):
+            print(f"\n✗ Guild ID {guild} not in bot's guild list — wrong ID or bot not fully added.")
+            sys.exit(1)
+        print()
 
-    print(f"Fetching channels for guild {guild} ...")
-    all_channels = {c["name"]: c["id"] for c in api("GET", f"/guilds/{guild}/channels") if c["type"] == 0}
+        # Fetch channels and create webhooks
+        print(f"Fetching channels for guild {guild} ...")
+        all_channels = {c["name"]: c["id"] for c in api(client, "GET", f"/guilds/{guild}/channels") if c["type"] == 0}
 
-    results = {}
-    for name, var in CHANNELS.items():
-        if name not in all_channels:
-            print(f"  ⚠  #{name} not found — skipping {var}")
-            results[var] = ""
-            continue
-        wh = api("POST", f"/channels/{all_channels[name]}/webhooks", {"name": "amit-ai-team"})
-        url = f"https://discord.com/api/webhooks/{wh['id']}/{wh['token']}"
-        results[var] = url
-        print(f"  ✓  #{name}")
+        results: dict[str, str] = {}
+        for name, var in CHANNELS.items():
+            if name not in all_channels:
+                print(f"  ⚠  #{name} not found — skipping {var}")
+                results[var] = ""
+                continue
+            wh = api(client, "POST", f"/channels/{all_channels[name]}/webhooks", json={"name": "amit-ai-team"})
+            results[var] = f"https://discord.com/api/webhooks/{wh['id']}/{wh['token']}"
+            print(f"  ✓  #{name}")
 
-    lines = [
+    # Write config/discord.env via pathlib
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text("\n".join([
         "# Discord Webhook Configuration — generated by just discord-setup",
         "# DO NOT COMMIT — this file is gitignored.",
         "",
@@ -451,25 +447,24 @@ discord-setup token="" guild="":
         "DISCORD_AVATAR_URL=",
         "",
         "# Activity",
-        f"DISCORD_WEBHOOK_UPDATES={results['DISCORD_WEBHOOK_UPDATES']}",
-        f"DISCORD_WEBHOOK_ALERTS={results['DISCORD_WEBHOOK_ALERTS']}",
+        f"DISCORD_WEBHOOK_UPDATES={results.get('DISCORD_WEBHOOK_UPDATES', '')}",
+        f"DISCORD_WEBHOOK_ALERTS={results.get('DISCORD_WEBHOOK_ALERTS', '')}",
         "",
         "# Specialist",
-        f"DISCORD_WEBHOOK_PM={results['DISCORD_WEBHOOK_PM']}",
-        f"DISCORD_WEBHOOK_DESIGN={results['DISCORD_WEBHOOK_DESIGN']}",
-        f"DISCORD_WEBHOOK_EXPLORATION={results['DISCORD_WEBHOOK_EXPLORATION']}",
-        f"DISCORD_WEBHOOK_ENGINEERING={results['DISCORD_WEBHOOK_ENGINEERING']}",
-        f"DISCORD_WEBHOOK_QA_STRATEGY={results['DISCORD_WEBHOOK_QA_STRATEGY']}",
-        f"DISCORD_WEBHOOK_QA_IMPLEMENTATION={results['DISCORD_WEBHOOK_QA_IMPLEMENTATION']}",
-        f"DISCORD_WEBHOOK_SECURITY={results['DISCORD_WEBHOOK_SECURITY']}",
-        f"DISCORD_WEBHOOK_PERFORMANCE={results['DISCORD_WEBHOOK_PERFORMANCE']}",
+        f"DISCORD_WEBHOOK_PM={results.get('DISCORD_WEBHOOK_PM', '')}",
+        f"DISCORD_WEBHOOK_DESIGN={results.get('DISCORD_WEBHOOK_DESIGN', '')}",
+        f"DISCORD_WEBHOOK_EXPLORATION={results.get('DISCORD_WEBHOOK_EXPLORATION', '')}",
+        f"DISCORD_WEBHOOK_ENGINEERING={results.get('DISCORD_WEBHOOK_ENGINEERING', '')}",
+        f"DISCORD_WEBHOOK_QA_STRATEGY={results.get('DISCORD_WEBHOOK_QA_STRATEGY', '')}",
+        f"DISCORD_WEBHOOK_QA_IMPLEMENTATION={results.get('DISCORD_WEBHOOK_QA_IMPLEMENTATION', '')}",
+        f"DISCORD_WEBHOOK_SECURITY={results.get('DISCORD_WEBHOOK_SECURITY', '')}",
+        f"DISCORD_WEBHOOK_PERFORMANCE={results.get('DISCORD_WEBHOOK_PERFORMANCE', '')}",
         "",
         "# Process",
-        f"DISCORD_WEBHOOK_DECISIONS={results['DISCORD_WEBHOOK_DECISIONS']}",
-        f"DISCORD_WEBHOOK_CICD={results['DISCORD_WEBHOOK_CICD']}",
-    ]
-    with open(cfg, "w") as f:
-        f.write("\n".join(lines) + "\n")
+        f"DISCORD_WEBHOOK_DECISIONS={results.get('DISCORD_WEBHOOK_DECISIONS', '')}",
+        f"DISCORD_WEBHOOK_CICD={results.get('DISCORD_WEBHOOK_CICD', '')}",
+        "",
+    ]))
 
     print(f"\n✓ Written to {cfg}")
     print("Run 'just discord-status' to verify.")
