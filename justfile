@@ -229,58 +229,78 @@ status:
 
 # ── Discord Notifications ─────────────────────────────────────────────────────
 # Config: copy config/discord.env.example → config/discord.env and fill in webhooks.
-# All targets are no-ops if config/discord.env does not exist (safe to call unconditionally).
+# Channel routing: each target picks a specific webhook; falls back to UPDATES if unset.
+# All targets are no-ops if config/discord.env does not exist.
 
-# Send a plain-text message to the updates channel
-# Usage: just notify "message"
+# General update — #updates channel
 notify msg:
     #!/usr/bin/env bash
     set -euo pipefail
     cfg="{{discord_config}}"
-    if [ ! -f "$cfg" ]; then
-        echo "{{y}}⚠{{n}} Discord not configured — copy config/discord.env.example → config/discord.env"
-        exit 0
-    fi
+    [ ! -f "$cfg" ] && echo "{{y}}⚠{{n}} Discord not configured — copy config/discord.env.example → config/discord.env" && exit 0
     source "$cfg"
     url="${DISCORD_WEBHOOK_UPDATES:-}"
-    if [ -z "$url" ]; then echo "{{y}}⚠{{n}} DISCORD_WEBHOOK_UPDATES not set in $cfg"; exit 0; fi
-    username="${DISCORD_USERNAME:-amit-ai-team}"
-    avatar="${DISCORD_AVATAR_URL:-}"
-    payload=$(jq -n \
-        --arg content "{{msg}}" \
-        --arg username "$username" \
-        --arg avatar "$avatar" \
-        '{content: $content, username: $username} + (if $avatar != "" then {avatar_url: $avatar} else {} end)')
-    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" \
-        -H "Content-Type: application/json" \
-        -d "$payload" | grep -q "^2" && echo "{{g}}✓{{n}} Discord notification sent" || echo "{{r}}✗{{n}} Discord POST failed"
+    [ -z "$url" ] && echo "{{y}}⚠{{n}} DISCORD_WEBHOOK_UPDATES not set" && exit 0
+    payload=$(jq -n --arg c "{{msg}}" --arg u "${DISCORD_USERNAME:-amit-ai-team}" --arg a "${DISCORD_AVATAR_URL:-}" \
+        '{content:$c,username:$u}+(if $a!="" then {avatar_url:$a} else {} end)')
+    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" -H "Content-Type: application/json" -d "$payload" \
+        | grep -q "^2" && echo "{{g}}✓{{n}} Discord notification sent" || echo "{{r}}✗{{n}} Discord POST failed"
 
-# Send an alert to the alerts channel (falls back to updates channel)
-# Usage: just alert "message"
+# Alert — #alerts channel (falls back to #updates)
 alert msg:
     #!/usr/bin/env bash
     set -euo pipefail
     cfg="{{discord_config}}"
-    if [ ! -f "$cfg" ]; then
-        echo "{{y}}⚠{{n}} Discord not configured — copy config/discord.env.example → config/discord.env"
-        exit 0
-    fi
+    [ ! -f "$cfg" ] && echo "{{y}}⚠{{n}} Discord not configured" && exit 0
     source "$cfg"
     url="${DISCORD_WEBHOOK_ALERTS:-${DISCORD_WEBHOOK_UPDATES:-}}"
-    if [ -z "$url" ]; then echo "{{y}}⚠{{n}} No alert webhook set in $cfg"; exit 0; fi
-    username="${DISCORD_USERNAME:-amit-ai-team}"
-    avatar="${DISCORD_AVATAR_URL:-}"
-    payload=$(jq -n \
-        --arg content ":warning: {{msg}}" \
-        --arg username "$username" \
-        --arg avatar "$avatar" \
-        '{content: $content, username: $username} + (if $avatar != "" then {avatar_url: $avatar} else {} end)')
-    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" \
-        -H "Content-Type: application/json" \
-        -d "$payload" | grep -q "^2" && echo "{{g}}✓{{n}} Discord alert sent" || echo "{{r}}✗{{n}} Discord POST failed"
+    [ -z "$url" ] && echo "{{y}}⚠{{n}} No alert webhook set" && exit 0
+    payload=$(jq -n --arg c ":warning: {{msg}}" --arg u "${DISCORD_USERNAME:-amit-ai-team}" --arg a "${DISCORD_AVATAR_URL:-}" \
+        '{content:$c,username:$u}+(if $a!="" then {avatar_url:$a} else {} end)')
+    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" -H "Content-Type: application/json" -d "$payload" \
+        | grep -q "^2" && echo "{{g}}✓{{n}} Discord alert sent" || echo "{{r}}✗{{n}} Discord POST failed"
 
-# Post latest handoff summary from memory/handoffs.md to Discord
-# Usage: just notify-handoff [agent] [path]   agent defaults to last updated section, path to "."
+# Specialist channel shortcuts — fall back to #updates if channel webhook not set
+# Usage: just notify-pm "PRD v2 approved"  |  just notify-security "XSS in /login"
+notify-pm msg:
+    just _notify-channel DISCORD_WEBHOOK_PM ":clipboard: [PM] {{msg}}"
+notify-design msg:
+    just _notify-channel DISCORD_WEBHOOK_DESIGN ":art: [Design] {{msg}}"
+notify-exploration msg:
+    just _notify-channel DISCORD_WEBHOOK_EXPLORATION ":mag: [Explorer] {{msg}}"
+notify-engineering msg:
+    just _notify-channel DISCORD_WEBHOOK_ENGINEERING ":gear: [Engineering] {{msg}}"
+notify-qa-strategy msg:
+    just _notify-channel DISCORD_WEBHOOK_QA_STRATEGY ":white_check_mark: [QA Strategy] {{msg}}"
+notify-qa msg:
+    just _notify-channel DISCORD_WEBHOOK_QA_IMPLEMENTATION ":test_tube: [QA] {{msg}}"
+notify-security msg:
+    just _notify-channel DISCORD_WEBHOOK_SECURITY ":shield: [Security] {{msg}}"
+notify-performance msg:
+    just _notify-channel DISCORD_WEBHOOK_PERFORMANCE ":racing_car: [Perf] {{msg}}"
+notify-decision msg:
+    just _notify-channel DISCORD_WEBHOOK_DECISIONS ":brain: [Decision] {{msg}}"
+notify-cicd msg:
+    just _notify-channel DISCORD_WEBHOOK_CICD ":rocket: [CI/CD] {{msg}}"
+
+# Internal: resolve env var by name (indirect expansion), fall back to UPDATES
+_notify-channel varname msg:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cfg="{{discord_config}}"
+    [ ! -f "$cfg" ] && exit 0
+    source "$cfg"
+    varname="{{varname}}"
+    url="${!varname:-}"
+    url="${url:-${DISCORD_WEBHOOK_UPDATES:-}}"
+    [ -z "$url" ] && exit 0
+    payload=$(jq -n --arg c "{{msg}}" --arg u "${DISCORD_USERNAME:-amit-ai-team}" --arg a "${DISCORD_AVATAR_URL:-}" \
+        '{content:$c,username:$u}+(if $a!="" then {avatar_url:$a} else {} end)')
+    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" -H "Content-Type: application/json" -d "$payload" \
+        | grep -q "^2" && echo "{{g}}✓{{n}} sent" || echo "{{r}}✗{{n}} failed"
+
+# Post handoff summary from memory/handoffs.md
+# Usage: just notify-handoff [agent] [path]
 notify-handoff agent="" path=invocation_directory():
     #!/usr/bin/env bash
     set -euo pipefail
@@ -290,26 +310,19 @@ notify-handoff agent="" path=invocation_directory():
         exit 1
     fi
     if [ -n "{{agent}}" ]; then
-        # Extract the named agent's section (from its ## heading to the next ##)
         msg=$(awk '/^## {{agent}}/{found=1} found && /^## / && !/^## {{agent}}/{exit} found{print}' "$handoffs" | head -30)
     else
-        # Use the last 20 lines of the file (most recently updated section)
         msg=$(tail -20 "$handoffs")
     fi
-    if [ -z "$msg" ]; then
-        echo "{{y}}⚠{{n}} No handoff content found for agent '{{agent}}'"
-        exit 0
-    fi
+    [ -z "$msg" ] && echo "{{y}}⚠{{n}} No handoff content found for '{{agent}}'" && exit 0
     just notify "$msg"
 
-# Post task completion notice to Discord
+# Post task completion to Discord
 # Usage: just notify-done <task-id>
 notify-done id:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! command -v bd &>/dev/null; then
-        echo "{{y}}⚠{{n}} bd not found"; exit 0
-    fi
+    command -v bd &>/dev/null || { echo "{{y}}⚠{{n}} bd not found"; exit 0; }
     info=$(bd show {{id}} --json 2>/dev/null | jq -r '"Task done: [" + .id + "] " + .title + " (P" + (.priority|tostring) + ")"' 2>/dev/null || echo "Task {{id}} marked done")
     just notify "$info"
 
@@ -320,13 +333,22 @@ discord-status:
     if [ ! -f "$cfg" ]; then
         echo "{{r}}✗{{n}} config/discord.env not found"
         echo "  Setup: cp config/discord.env.example config/discord.env"
-        echo "         then fill in your webhook URL(s)"
         exit 0
     fi
     source "$cfg"
-    echo "=== Discord config ($cfg) ==="
+    echo "=== Discord ($cfg) ==="
+    check() { [ -n "${!1:-}" ] && echo "{{g}}✓{{n}} $1" || echo "  $1  (not set)"; }
+    check DISCORD_WEBHOOK_UPDATES
+    check DISCORD_WEBHOOK_ALERTS
+    check DISCORD_WEBHOOK_PM
+    check DISCORD_WEBHOOK_DESIGN
+    check DISCORD_WEBHOOK_EXPLORATION
+    check DISCORD_WEBHOOK_ENGINEERING
+    check DISCORD_WEBHOOK_QA_STRATEGY
+    check DISCORD_WEBHOOK_QA_IMPLEMENTATION
+    check DISCORD_WEBHOOK_SECURITY
+    check DISCORD_WEBHOOK_PERFORMANCE
+    check DISCORD_WEBHOOK_DECISIONS
+    check DISCORD_WEBHOOK_CICD
     echo ""
-    [ -n "${DISCORD_WEBHOOK_UPDATES:-}" ] && echo "{{g}}✓{{n}} DISCORD_WEBHOOK_UPDATES  set" || echo "{{r}}✗{{n}} DISCORD_WEBHOOK_UPDATES  not set"
-    [ -n "${DISCORD_WEBHOOK_ALERTS:-}"  ] && echo "{{g}}✓{{n}} DISCORD_WEBHOOK_ALERTS   set" || echo "  DISCORD_WEBHOOK_ALERTS   not set (falls back to UPDATES)"
-    [ -n "${DISCORD_USERNAME:-}"        ] && echo "{{g}}✓{{n}} DISCORD_USERNAME         ${DISCORD_USERNAME}" || echo "  DISCORD_USERNAME         not set (default: amit-ai-team)"
-    [ -n "${DISCORD_AVATAR_URL:-}"      ] && echo "{{g}}✓{{n}} DISCORD_AVATAR_URL       set" || echo "  DISCORD_AVATAR_URL       not set (Discord default)"
+    [ -n "${DISCORD_USERNAME:-}" ] && echo "{{g}}✓{{n}} DISCORD_USERNAME  ${DISCORD_USERNAME}" || echo "  DISCORD_USERNAME  not set (default: amit-ai-team)"
