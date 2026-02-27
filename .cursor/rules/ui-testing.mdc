@@ -1,0 +1,162 @@
+---
+description: UI automated test recording and AI-assisted fix suggestion standards. Every failing UI test must produce a video recording, screenshot, and trace. On failure, analyze the artifacts and produce a structured UI Fix Suggestion. Use when writing, configuring, or debugging E2E or component-level UI tests.
+globs: "**/*.spec.ts", "**/*.spec.tsx", "**/*.test.ts", "**/playwright.config.*", "**/cypress.config.*", "**/tests/e2e/**"
+alwaysApply: false
+---
+
+# UI Test Recording & AI Fix Suggestions
+
+## Rule
+
+Every UI automated test must be configured to **record on failure**. When a test fails, analyze the recording and produce a structured **UI Fix Suggestion** that pinpoints the root cause and proposes a concrete fix.
+
+---
+
+## Recording Configuration
+
+### Playwright (default)
+
+```typescript
+// playwright.config.ts
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  use: {
+    video:      'retain-on-failure',   // record video; keep only on failure
+    screenshot: 'only-on-failure',     // capture screenshot at point of failure
+    trace:      'retain-on-failure',   // DOM snapshots + network + console on failure
+  },
+  reporter: [
+    ['html',  { open: 'never' }],
+    ['json',  { outputFile: 'test-results/results.json' }],
+    ['junit', { outputFile: 'test-results/junit.xml' }],
+  ],
+  outputDir: 'test-results/',
+});
+```
+
+Artifacts are written to `test-results/<test-name>/`:
+```
+test-results/
+└── checkout-happy-path/
+    ├── video.webm          ← full session recording
+    ├── screenshot.png      ← frame at point of assertion failure
+    └── trace.zip           ← open with: bunx playwright show-trace trace.zip
+```
+
+### Cypress (if already in use)
+
+```javascript
+// cypress.config.js
+module.exports = defineConfig({
+  video: true,
+  videoCompression: 32,
+  screenshotOnRunFailure: true,
+  videosFolder: 'cypress/videos',
+  screenshotsFolder: 'cypress/screenshots',
+});
+```
+
+---
+
+## justfile targets
+
+```justfile
+# Run E2E tests; keep recordings of failures only
+test-e2e:
+    bunx playwright test
+
+# Open Playwright HTML report with recordings
+test-report:
+    bunx playwright show-report
+
+# Open trace for a specific test (usage: just trace-show <path>)
+trace-show path:
+    bunx playwright show-trace {{path}}
+
+# Run a single test file in headed mode for debugging
+test-debug file:
+    bunx playwright test {{file}} --headed --video=on
+```
+
+---
+
+## AI Fix Suggestion Protocol
+
+When a UI test fails, **always produce a UI Fix Suggestion** before filing a bug or raising a PR comment. This is the standard output format:
+
+```markdown
+## UI Fix Suggestion — [TestName]
+
+**Test**: `tests/e2e/[file].spec.ts` → `[describe block] > [test name]`
+**Failure**: [exact assertion that failed]
+**Artifacts**:
+  - Video: `test-results/[test-name]/video.webm`
+  - Screenshot: `test-results/[test-name]/screenshot.png`
+  - Trace: `bunx playwright show-trace test-results/[test-name]/trace.zip`
+
+### Visual Analysis
+[What was visible at the point of failure — describe the UI state, what element
+was present/absent/wrong, what interaction happened before failure]
+
+### Root Cause
+[One of: missing element | wrong selector | timing/animation | style regression |
+data not loaded | wrong component state | layout overflow | accessibility failure]
+
+### Design Spec vs Actual
+
+| Aspect | Expected (design spec / AC) | Actual (from recording) |
+|---|---|---|
+| [element name] | [what spec says] | [what recording shows] |
+| [property] | [expected value] | [observed value] |
+
+### Proposed Fix
+
+**Component / File**: `[path/to/component.tsx]`
+**Type**: [CSS fix | component logic | selector update | timing fix | data fix]
+
+```diff
+- [current code/CSS causing the failure]
++ [proposed fix]
+```
+
+**Confidence**: High / Medium / Low
+**Reason for confidence**: [why you're sure / what's uncertain]
+
+### Handoff
+
+→ **[Designer | Backend Python | Junior | Architect]**: [what action is needed and why]
+```
+
+---
+
+## Analysis Checklist (run before producing a Fix Suggestion)
+
+- [ ] Watch the full video from start to failure frame
+- [ ] Open the trace to inspect DOM state, network calls, and console errors at failure
+- [ ] Identify the exact frame where state diverged from expected
+- [ ] Check: was the element missing, wrong text, wrong style, or obscured?
+- [ ] Cross-reference with designer's component spec (from `memory/handoffs.md` Designer section or design system)
+- [ ] Check if a recent network response returned unexpected data
+- [ ] Determine: is this a UI bug (fix the component) or a test bug (fix the locator/timing)?
+
+---
+
+## Rules
+
+- **Never disable a failing UI test** without first producing a Fix Suggestion.
+- **Always use `retain-on-failure`**, not `on` — recording on every run bloats CI storage.
+- **Trace is mandatory** alongside video — screenshot alone is insufficient for DOM-level diagnosis.
+- **Fix Suggestions go to the responsible party**: style issues → Designer; selector/timing issues → Junior or Architect; data issues → Backend Python.
+- **Locators must use accessible roles**, not CSS classes or IDs:
+  ```typescript
+  // ❌ fragile
+  page.locator('.btn-primary-checkout')
+  page.locator('#submit-btn')
+
+  // ✅ robust
+  page.getByRole('button', { name: 'Place Order' })
+  page.getByLabel('Email address')
+  page.getByTestId('checkout-submit')  // only when ARIA not sufficient
+  ```
+- **`data-testid` is the last resort**, not the first choice.

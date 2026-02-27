@@ -1,0 +1,73 @@
+---
+description: Security scanning — osv-scanner for dependency vulnerabilities, trivy for Docker image scanning. Always run both in CI before merge and release.
+alwaysApply: true
+---
+
+# Security Scanning
+
+## Dependency Scanning — osv-scanner
+
+Use **osv-scanner** to check all project dependencies against the OSV vulnerability database. Replaces `safety` and `pip-audit` for Python projects.
+
+```bash
+# Scan the project (auto-discovers lockfiles)
+osv-scanner scan --recursive .
+
+# Scan a specific lockfile
+osv-scanner scan --lockfile uv.lock
+
+# CI: exit non-zero on any vulnerability
+osv-scanner scan --recursive . --format table
+```
+
+Add to justfile:
+
+```justfile
+# Scan dependencies for known vulnerabilities
+scan-deps:
+    osv-scanner scan --recursive .
+```
+
+Supports: `uv.lock`, `requirements.txt`, `package-lock.json`, `go.sum`, `Cargo.lock`, and more.
+
+## Docker Image Scanning — trivy
+
+Use **trivy** to scan Docker images for OS and library vulnerabilities before pushing to a registry. Fail CI on HIGH or CRITICAL findings.
+
+```bash
+# Scan a built image (informational)
+trivy image myapp:latest
+
+# CI: exit non-zero on HIGH or CRITICAL
+trivy image --exit-code 1 --severity HIGH,CRITICAL myapp:latest
+
+# Scan the filesystem / IaC (no image needed)
+trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+```
+
+Add to justfile:
+
+```justfile
+# Scan docker image for vulnerabilities (usage: just scan-image myapp:latest)
+scan-image tag:
+    trivy image --exit-code 1 --severity HIGH,CRITICAL {{tag}}
+
+# Scan source tree and IaC
+scan-fs:
+    trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+```
+
+## CI Pipeline Integration
+
+```
+PR commit   → osv-scanner (warn on HIGH, fail on CRITICAL)
+PR merge    → osv-scanner (fail on HIGH+) + trivy image (fail on HIGH+)
+Daily       → both scans on main branch; results posted to security channel
+Pre-release → both scans must be clean before release gate opens
+```
+
+## Rules
+
+- Never push an image to production with unreviewed HIGH or CRITICAL trivy findings.
+- osv-scanner runs on every PR; a CRITICAL finding blocks merge.
+- Accepted/false-positive findings must be documented in `.trivyignore` or `osv-scanner.toml` with a comment and expiry date.

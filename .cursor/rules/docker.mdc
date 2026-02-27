@@ -1,0 +1,96 @@
+---
+description: Dockerfile best practices — always use BuildKit cache mounts to speed up builds
+globs: "**/Dockerfile*", "**/docker-compose*.yml", "**/.dockerignore"
+alwaysApply: false
+---
+
+# Docker — Build Caching
+
+Always use **BuildKit cache mounts** (`--mount=type=cache`) for package managers and any other layer that downloads or compiles external dependencies. This makes rebuilds fast even when dependencies change.
+
+Enable BuildKit: `DOCKER_BUILDKIT=1` (set in CI env or `docker-compose.yml` via `COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1`).
+
+## Python (uv)
+
+```dockerfile
+FROM python:3.12-slim
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+
+# ✅ cache uv's download cache across builds
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+COPY . .
+```
+
+## JavaScript / TypeScript (bun)
+
+```dockerfile
+FROM oven/bun:1-alpine AS deps
+WORKDIR /app
+COPY package.json bun.lock ./
+
+# ✅ cache bun's install cache across builds
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
+
+FROM oven/bun:1-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN bun run build
+
+FROM oven/bun:1-alpine AS runtime
+WORKDIR /app
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+USER nonroot
+CMD ["bun", "run", "start"]
+```
+
+Never use `npm ci` or `yarn install` in new Dockerfiles — always `bun install --frozen-lockfile`.
+
+## System packages (apt)
+
+```dockerfile
+# ✅ cache apt package index and downloaded .deb files
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+## Multi-stage builds (always use for production images)
+
+```dockerfile
+# Stage 1 — install deps with uv
+FROM python:3.12-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --prefix=/install
+
+# Stage 2 — minimal runtime image (no uv, no build tools)
+FROM python:3.12-slim AS runtime
+COPY --from=builder /install /usr/local
+COPY . /app
+WORKDIR /app
+USER nobody
+CMD ["python", "-m", "myapp"]
+```
+
+## Rules
+
+- Every `RUN` that installs packages must use `--mount=type=cache`.
+- Never use `FROM ... AS latest` or `FROM python:latest` — always pin the version.
+- Final stage runs as a non-root user (`USER nobody` or a named user).
+- `.dockerignore` must exclude: `.git`, `__pycache__`, `*.pyc`, `node_modules`, `.env*`, `tests/`.

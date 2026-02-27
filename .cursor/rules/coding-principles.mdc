@@ -1,0 +1,178 @@
+---
+description: Core coding principles for all code and tests in this project
+alwaysApply: true
+---
+
+# Coding Principles
+
+## General
+
+**Minimum code, maximum results** — write the simplest implementation that satisfies the requirement. No speculative abstractions, no premature generalization.
+
+**DRY (Don't Repeat Yourself)** — every piece of logic lives in exactly one place. If you write the same thing twice, extract it.
+
+```python
+# ❌ repeated logic
+def test_login_admin():
+    driver.find_element(By.ID, "username").send_keys("admin")
+    driver.find_element(By.ID, "password").send_keys("secret")
+    driver.find_element(By.ID, "submit").click()
+
+def test_login_user():
+    driver.find_element(By.ID, "username").send_keys("user")
+    driver.find_element(By.ID, "password").send_keys("pass")
+    driver.find_element(By.ID, "submit").click()
+
+# ✅ extracted
+def login(driver, username, password):
+    driver.find_element(By.ID, "username").send_keys(username)
+    driver.find_element(By.ID, "password").send_keys(password)
+    driver.find_element(By.ID, "submit").click()
+```
+
+## Automated Tests
+
+**Atomic and independent** — every test must be able to run in any order, in isolation, and produce the same result. Tests must not depend on state left by another test.
+
+```python
+# ❌ depends on test_create_user running first
+def test_delete_user(self):
+    self.client.delete("/users/1")   # who created user 1?
+
+# ✅ self-contained
+def test_delete_user(self):
+    user = self.client.post("/users", json={"name": "temp"}).json()
+    resp = self.client.delete(f"/users/{user['id']}")
+    self.assertEqual(resp.status_code, 204)
+```
+
+**Always clean up in `tearDown`** — every test that creates data, opens a connection, writes a file, or changes shared state must undo it in `tearDown` (or an equivalent fixture finalizer). Use `addCleanup` for inline registration.
+
+```python
+class UserAPITest(BaseAPITest):
+    def setUp(self):
+        super().setUp()
+        self.created_ids: list[int] = []
+
+    def tearDown(self):
+        for uid in self.created_ids:
+            self.client.delete(f"/users/{uid}")
+        super().tearDown()
+
+    def test_create_user(self):
+        resp = self.client.post("/users", json={"name": "temp"})
+        self.created_ids.append(resp.json()["id"])
+        self.assertEqual(resp.status_code, 201)
+```
+
+**Classes and modular design** — group related tests in a class; extract shared setup into base classes or mixins. Use inheritance when specialist behaviour extends a common base.
+
+```python
+# ✅ modular with inheritance
+class BaseAPITest(unittest.TestCase):
+    def setUp(self):
+        self.client = APIClient(base_url=BASE_URL)
+        self.auth_token = self.client.login("test_user", "password")
+
+class UserAPITest(BaseAPITest):
+    def test_get_profile(self):
+        resp = self.client.get("/users/me", token=self.auth_token)
+        self.assertEqual(resp.status_code, 200)
+```
+
+**Parameterized Python tests** — use the `parameterized` library (https://pypi.org/project/parameterized/) for data-driven test cases instead of duplicating test methods.
+
+```python
+from parameterized import parameterized
+
+class AuthTest(unittest.TestCase):
+    @parameterized.expand([
+        ("missing_token",  "",          401),
+        ("expired_token",  "expired",   401),
+        ("invalid_token",  "bad-token", 403),
+    ])
+    def test_auth_failure(self, name, token, expected_status):
+        resp = self.client.get("/secure", token=token)
+        self.assertEqual(resp.status_code, expected_status)
+```
+
+## Integration Tests
+
+**Use real services, not mocks** — integration tests must run against the actual downstream service (database, cache, queue, etc.). Use Docker Compose, testcontainers, or a dedicated test environment. Mocking is only acceptable in unit tests.
+
+```python
+# ❌ mocking in an integration test defeats the purpose
+@patch("myapp.services.email.send_email", new_callable=AsyncMock)
+async def test_registration_integration(mock_send, client):
+    mock_send.return_value = True          # this tells you nothing about real behaviour
+    ...
+
+# ✅ real service in an integration test
+async def test_registration_integration(client, db_session, mailhog):
+    resp = await client.post("/auth/register", json={"email": "a@b.com", "password": "secret"})
+    assert resp.status_code == 201
+    # verify the email was actually sent to the real mail server
+    messages = mailhog.get_messages()
+    assert any("a@b.com" in m["to"] for m in messages)
+```
+
+Use testcontainers to spin up real services per test run when a shared environment isn't available:
+
+```python
+from testcontainers.postgres import PostgresContainer
+
+@pytest.fixture(scope="session")
+def postgres():
+    with PostgresContainer("postgres:16-alpine") as pg:
+        yield pg
+```
+
+## Shell Tools
+
+**Use `rg` (ripgrep) instead of `grep`** — faster, respects `.gitignore`, better defaults.
+
+```bash
+# ❌
+grep -r "TODO" .
+grep -rn "def fetch" src/
+
+# ✅
+rg "TODO"
+rg "def fetch" src/
+
+# Common flags
+rg "pattern" --type py          # filter by file type
+rg "pattern" -l                 # files with matches only
+rg "pattern" -A 3               # 3 lines of context after match
+rg "pattern" --no-ignore        # include .gitignore'd files
+```
+
+Never use `grep` in scripts, justfile targets, or documentation examples — always `rg`.
+
+## Performance Testing
+
+**Always use k6** for performance and load tests. JavaScript-based, CLI-friendly, CI-ready.
+
+```javascript
+// ✅ k6 load test skeleton
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '2m', target: 100 },  // ramp up
+    { duration: '10m', target: 100 }, // hold
+    { duration: '1m', target: 0 },    // ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'],
+    http_req_failed: ['rate<0.01'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://api.example.com/health');
+  check(res, { 'status 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```

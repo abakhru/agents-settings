@@ -1,0 +1,55 @@
+---
+description: Project tool version management using mise.toml — pins Python, Node, and all other tool versions for reproducible environments across dev, CI, and production
+alwaysApply: true
+---
+
+# Project Setup — mise
+
+Use **mise** (`mise.toml`) to pin all tool versions at the repo root. Ensures every developer and CI job uses exactly the same versions. Works for any language — not just Python.
+
+## mise.toml (commit to git)
+
+```toml
+[tools]
+python = "3.12"
+node = "20.11"
+just = "1.36"
+# add other tools as needed: go, rust, terraform, etc.
+```
+
+## Bootstrap
+
+```bash
+# Install mise (once per machine)
+curl https://mise.run | sh
+
+# Install all pinned tool versions for the project
+mise install
+
+# Verify active versions
+mise current
+```
+
+CI must call `mise install` as the first step before any build or test command:
+
+```yaml
+# GitHub Actions example
+- name: Install tool versions
+  run: mise install
+```
+
+## Add to justfile
+
+```justfile
+# Install all tool versions pinned in mise.toml
+bootstrap:
+    mise install
+    uv sync
+```
+
+## Rules
+
+- `mise.toml` lives at the repo root and is always committed to git.
+- Pin at least major + minor: `python = "3.12"` not `"3"`.
+- Do not use `.tool-versions` (asdf format) alongside `mise.toml` — pick one.
+- If a tool is in `mise.toml`, never install it globally with Homebrew or manually — let mise manage it.

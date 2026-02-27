@@ -1,0 +1,122 @@
+---
+description: Task runner conventions using just — all team-generated code must have a justfile with help as the default target
+alwaysApply: true
+---
+
+# Task Runner — just
+
+Every project must have a `justfile` at the repo root. All runnable tasks go here — no raw `make`, `npm run`, or `python -m` commands in docs or CI without a `just` wrapper.
+
+## Default target — help
+
+`help` is always the default target. Running `just` with no arguments lists all available targets.
+
+```justfile
+# Show available commands (default)
+default:
+    @just --list
+```
+
+## Standard targets
+
+Every project includes these targets. Add project-specific ones below the standard set.
+
+```justfile
+# Show available commands (default)
+default:
+    @just --list
+
+# Install / bootstrap the project
+install:
+    pip install -e ".[dev]"
+
+# Run all linting
+lint:
+    ruff check .
+
+# Auto-fix lint + format
+fix:
+    ruff check --fix .
+    ruff format .
+
+# Type checking
+typecheck:
+    ty check .
+
+# Run unit tests
+test:
+    pytest tests/unit
+
+# Run all tests
+test-all:
+    pytest tests/
+
+# Run a specific test file or pattern (usage: just test-one tests/unit/test_auth.py)
+test-one file:
+    pytest {{ file }} -v
+
+# Build docker image
+build:
+    docker build -t {{APP_NAME}} .
+
+# Start local environment
+up:
+    docker compose up -d
+
+# Stop local environment
+down:
+    docker compose down
+
+# Full CI check (lint + typecheck + test)
+ci:
+    just lint && just typecheck && just test-all
+```
+
+## Standard targets — JavaScript / TypeScript (bun + vinext)
+
+```justfile
+# Show available commands (default)
+default:
+    @just --list
+
+# Install dependencies
+install:
+    bun install
+
+# Start development server
+dev:
+    vinext dev
+
+# Production build
+build:
+    vinext build
+
+# Deploy to Cloudflare Workers
+deploy:
+    vinext deploy
+
+# Type check
+typecheck:
+    bun run tsc --noEmit
+
+# Lint
+lint:
+    bun run eslint .
+
+# Run tests
+test:
+    bun test
+
+# Full CI check
+ci:
+    just typecheck && just lint && just test && just build
+```
+
+## Rules
+
+- `just` with no args must always print available targets — never error or run code silently.
+- Targets are lowercase, hyphen-separated: `test-all`, not `testAll` or `test_all`.
+- Each target has a comment (`# description`) — it appears in `just --list` output.
+- Variables (e.g., `APP_NAME`) defined at the top of the justfile or passed as env vars.
+- CI pipelines call `just <target>`, never the raw command directly.
+- JS/TS projects: use `bun` commands; never `npm run` or `npx` in justfile targets.

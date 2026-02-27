@@ -1,0 +1,85 @@
+---
+description: Python package management (uv), linting (ruff), formatting, and type checking (ty) standards
+globs: **/*.py, **/pyproject.toml, **/ruff.toml, **/uv.lock
+alwaysApply: false
+---
+
+# Python Tooling
+
+## Package Manager — uv
+
+Use **uv** for all new Python projects. Never use bare `pip`, `pip-tools`, or `poetry` for new projects.
+
+```bash
+# New project
+uv init my-project && cd my-project
+
+# Add dependencies
+uv add fastapi sqlalchemy[asyncio] pydantic-settings
+uv add --dev ruff pytest pytest-asyncio httpx ty
+
+# Run without activating venv
+uv run pytest
+uv run python -m myapp
+
+# Sync after pulling (replaces pip install -r requirements.txt)
+uv sync
+```
+
+`uv` manages the virtualenv automatically — no `python -m venv`, `pip install`, or `pyenv virtualenv` needed.
+
+| Don't | Do instead |
+|---|---|
+| `pip install -r requirements.txt` | `uv sync` |
+| `pip install fastapi` | `uv add fastapi` |
+| `pip install -e .` | `uv sync` (editable by default) |
+
+## Linting & Formatting — ruff
+
+Use **ruff** for all Python linting and formatting. Configuration lives in `pyproject.toml`:
+
+```toml
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]   # pycodestyle, pyflakes, isort, pyupgrade
+```
+
+Always run via `just`:
+```
+just lint      # ruff check .
+just format    # ruff format .
+just fix       # ruff check --fix . && ruff format .
+```
+
+Never mix ruff with flake8, black, or isort — ruff replaces all three.
+
+## Type Checking — ty
+
+Use **ty** (Astral) for static type checking. Configuration in `pyproject.toml`:
+
+```toml
+[tool.ty]
+# strict mode recommended for new code
+```
+
+Run via `just`:
+```
+just typecheck   # ty check .
+```
+
+All new Python code must be fully typed. Annotate function signatures and return types; no bare `Any` without a comment explaining why.
+
+```python
+# ❌ untyped
+def fetch_user(user_id):
+    return db.get(user_id)
+
+# ✅ typed
+def fetch_user(user_id: int) -> User | None:
+    return db.get(user_id)
+```
