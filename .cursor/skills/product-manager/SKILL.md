@@ -165,13 +165,6 @@ Success state: [what "done" looks like for the user]
 
 ## Memory Protocol
 
-At **session start**: read `memory/CONTEXT.md` + `memory/handoffs.md` (CONTEXT.md only (first in chain)) + skim `memory/open-questions.md` for your open items.
-
-At **session end**: replace your section in `memory/handoffs.md`, append new entries to `memory/decisions.md`, update `memory/open-questions.md`, and update the "Last activity" line in `memory/CONTEXT.md`.
-
-Full protocol and file formats: see [memory-manager skill](../memory-manager/SKILL.md).
-
-## Additional Resources
-
-- Full PRD template: [references/prd-template.md](references/prd-template.md)
-- QA team standards (severity, coverage targets): [team-standards.md](../qa-team-orchestrator/team-standards.md)
+**Start**: `bd ready` → claim → read CONTEXT.md + open-questions (first in chain — no predecessor handoffs).
+**End**: `--status done` → update handoffs.md, decisions.md, open-questions.md, CONTEXT last-activity.
+→ Full protocol: [memory-manager](../memory-manager/SKILL.md) · PRD template: [prd-template.md](references/prd-template.md)

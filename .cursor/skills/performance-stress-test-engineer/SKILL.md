@@ -88,12 +88,6 @@ Keep reports short; put raw data or long logs in attachments or links.
 
 ## Memory Protocol
 
-At **session start**: read `memory/CONTEXT.md` + `memory/handoffs.md` (explorer, architect sections) + skim `memory/open-questions.md` for your open items.
-
-At **session end**: replace your section in `memory/handoffs.md`, append new entries to `memory/decisions.md`, update `memory/open-questions.md`, and update the "Last activity" line in `memory/CONTEXT.md`.
-
-Full protocol and file formats: see [memory-manager skill](../memory-manager/SKILL.md).
-
-## Additional Resources
-
-- See [team-standards.md](../qa-team-orchestrator/team-standards.md) for tool choices (k6, Locust, Gatling), naming conventions, severity definitions (P0-P3), and CI stage placement for performance tests.
+**Start**: `bd ready` → claim → read CONTEXT.md + handoffs (explorer, architect) + open-questions.
+**End**: `--status done` → update handoffs.md, decisions.md, open-questions.md, CONTEXT last-activity.
+→ Full protocol: [memory-manager](../memory-manager/SKILL.md) · Standards: [team-standards.md](../qa-team-orchestrator/team-standards.md)

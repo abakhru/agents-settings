@@ -347,8 +347,4 @@ One section per specialist. **Replace your section entirely each session** — a
 | Leave open questions unresolved for multiple sessions | Resolve or escalate within 1 session |
 | Skip writing memory at session end because "it's a small change" | Every session end writes memory and updates Beads |
 
-## Additional Resources
-
-- File templates: [templates/](templates/)
-- Beads documentation: [github.com/steveyegge/beads](https://github.com/steveyegge/beads)
-- Team standards: [team-standards.md](../qa-team-orchestrator/team-standards.md)
+→ Templates: [templates/](templates/) · Beads: [github.com/steveyegge/beads](https://github.com/steveyegge/beads) · Standards: [team-standards.md](../qa-team-orchestrator/team-standards.md)

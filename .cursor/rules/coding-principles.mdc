@@ -11,25 +11,6 @@ alwaysApply: true
 
 **DRY (Don't Repeat Yourself)** — every piece of logic lives in exactly one place. If you write the same thing twice, extract it.
 
-```python
-# ❌ repeated logic
-def test_login_admin():
-    driver.find_element(By.ID, "username").send_keys("admin")
-    driver.find_element(By.ID, "password").send_keys("secret")
-    driver.find_element(By.ID, "submit").click()
-
-def test_login_user():
-    driver.find_element(By.ID, "username").send_keys("user")
-    driver.find_element(By.ID, "password").send_keys("pass")
-    driver.find_element(By.ID, "submit").click()
-
-# ✅ extracted
-def login(driver, username, password):
-    driver.find_element(By.ID, "username").send_keys(username)
-    driver.find_element(By.ID, "password").send_keys(password)
-    driver.find_element(By.ID, "submit").click()
-```
-
 ## Automated Tests
 
 **Atomic and independent** — every test must be able to run in any order, in isolation, and produce the same result. Tests must not depend on state left by another test.
@@ -158,25 +139,7 @@ def postgres():
 
 ## Shell Tools
 
-**Use `rg` (ripgrep) instead of `grep`** — faster, respects `.gitignore`, better defaults.
-
-```bash
-# ❌
-grep -r "TODO" .
-grep -rn "def fetch" src/
-
-# ✅
-rg "TODO"
-rg "def fetch" src/
-
-# Common flags
-rg "pattern" --type py          # filter by file type
-rg "pattern" -l                 # files with matches only
-rg "pattern" -A 3               # 3 lines of context after match
-rg "pattern" --no-ignore        # include .gitignore'd files
-```
-
-Never use `grep` in scripts, justfile targets, or documentation examples — always `rg`.
+**Use `rg` (ripgrep) instead of `grep`** — faster, respects `.gitignore`, better defaults. Never use `grep` in scripts, justfile targets, or docs.
 
 ## Git Commits
 
@@ -201,28 +164,4 @@ fix auth token refresh
 
 ## Performance Testing
 
-**Always use k6** for performance and load tests. JavaScript-based, CLI-friendly, CI-ready.
-
-```javascript
-// ✅ k6 load test skeleton
-import http from 'k6/http';
-import { check, sleep } from 'k6';
-
-export const options = {
-  stages: [
-    { duration: '2m', target: 100 },  // ramp up
-    { duration: '10m', target: 100 }, // hold
-    { duration: '1m', target: 0 },    // ramp down
-  ],
-  thresholds: {
-    http_req_duration: ['p(95)<500'],
-    http_req_failed: ['rate<0.01'],
-  },
-};
-
-export default function () {
-  const res = http.get('https://api.example.com/health');
-  check(res, { 'status 200': (r) => r.status === 200 });
-  sleep(1);
-}
-```
+**Always use k6** — JavaScript-based, CLI-friendly, CI-ready. Define `thresholds` (`p(95)<500`, `rate<0.01`) and `stages` (ramp up → hold → ramp down). See `performance-stress-test-engineer` skill for full patterns.

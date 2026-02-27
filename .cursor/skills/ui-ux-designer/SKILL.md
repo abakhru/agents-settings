@@ -227,14 +227,6 @@ Patterns introduced: [new patterns added to the system]
 
 ## Memory Protocol
 
-At **session start**: read `memory/CONTEXT.md` + `memory/handoffs.md` (pm section) + skim `memory/open-questions.md` for your open items.
-
-At **session end**: replace your section in `memory/handoffs.md`, append new entries to `memory/decisions.md`, update `memory/open-questions.md`, and update the "Last activity" line in `memory/CONTEXT.md`.
-
-Full protocol and file formats: see [memory-manager skill](../memory-manager/SKILL.md).
-
-## Additional Resources
-
-- Full design & accessibility checklist: [references/design-checklist.md](references/design-checklist.md)
-- Team standards (severity, QA coverage): [team-standards.md](../qa-team-orchestrator/team-standards.md)
-- Example design brief (fintech dashboard): [ux-designer.md](../../../ux-designer.md)
+**Start**: `bd ready` → claim → read CONTEXT.md + handoffs (pm) + open-questions.
+**End**: `--status done` → update handoffs.md, decisions.md, open-questions.md, CONTEXT last-activity.
+→ Full protocol: [memory-manager](../memory-manager/SKILL.md) · Checklist: [design-checklist.md](references/design-checklist.md)

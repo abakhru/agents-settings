@@ -207,12 +207,6 @@ Patterns to follow in existing tests:
 
 ## Memory Protocol
 
-At **session start**: read `memory/CONTEXT.md` + `memory/handoffs.md` (pm, designer sections) + skim `memory/open-questions.md` for your open items.
-
-At **session end**: replace your section in `memory/handoffs.md`, append new entries to `memory/decisions.md`, update `memory/open-questions.md`, and update the "Last activity" line in `memory/CONTEXT.md`.
-
-Full protocol and file formats: see [memory-manager skill](../memory-manager/SKILL.md).
-
-## Additional Resources
-
-- See [team-standards.md](../qa-team-orchestrator/team-standards.md) for severity definitions (P0–P3) used in risk flags.
+**Start**: `bd ready` → claim → read CONTEXT.md + handoffs (pm, designer) + open-questions.
+**End**: `--status done` → update handoffs.md, decisions.md, open-questions.md, CONTEXT last-activity.
+→ Full protocol: [memory-manager](../memory-manager/SKILL.md) · Standards: [team-standards.md](../qa-team-orchestrator/team-standards.md)

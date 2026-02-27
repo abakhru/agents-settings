@@ -101,12 +101,6 @@ P0/P1 findings block release. P2/P3 tracked in backlog with risk acceptance docu
 
 ## Memory Protocol
 
-At **session start**: read `memory/CONTEXT.md` + `memory/handoffs.md` (explorer, architect sections) + skim `memory/open-questions.md` for your open items.
-
-At **session end**: replace your section in `memory/handoffs.md`, append new entries to `memory/decisions.md`, update `memory/open-questions.md`, and update the "Last activity" line in `memory/CONTEXT.md`.
-
-Full protocol and file formats: see [memory-manager skill](../memory-manager/SKILL.md).
-
-## Additional Resources
-
-- See [team-standards.md](../qa-team-orchestrator/team-standards.md) for tool defaults (Semgrep, ZAP), CI stage placement, and severity definitions.
+**Start**: `bd ready` → claim → read CONTEXT.md + handoffs (explorer, architect) + open-questions.
+**End**: `--status done` → update handoffs.md, decisions.md, open-questions.md, CONTEXT last-activity.
+→ Full protocol: [memory-manager](../memory-manager/SKILL.md) · Standards: [team-standards.md](../qa-team-orchestrator/team-standards.md)

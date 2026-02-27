@@ -79,47 +79,10 @@ just docker-build          # if Dockerfile changed
 
 ---
 
-## Example
-
-**Bad** (never do this):
-```
-User: Add rate limiting to /auth/login
-Agent: *immediately writes middleware code*
-Agent: Done! I added the middleware.
-```
-
-**Good** (always do this):
-```
-User: Add rate limiting to /auth/login
-
-Agent:
-**Plan:**
-1. Add Redis-backed rate limiter middleware
-2. Apply to /auth/login route (5 req/min per IP)
-3. Return 429 with Retry-After header on breach
-
-**Validation strategy:**
-- mix test test/auth/rate_limit_test.exs
-- k6 burst test: 10 reqs in 1s → assert 429 after req #5
-- mix credo
-- trivy image (if Docker changed)
-
-*[implements, then runs each validation step]*
-
-**Verification results:**
-✓ mix test — 12 passed, 0 failed
-✓ k6 burst — 429 returned at req 6, Retry-After: 58
-✓ mix credo — no issues
-All checks passed. Pushing.
-```
-
----
-
 ## Key Principles
 
-1. **Never skip validation** — every code change must be verified before completion
-2. **Plan first** — know your approach and validation strategy before writing code
-3. **Atomic changes** — one logical change per implementation cycle
-4. **Fix issues immediately** — don't accumulate technical debt
-5. **Show evidence** — share validation output with the user, not just "it works"
-6. **Use specialists** — delegate to a Task subagent when the scope fits a specialist skill
+- Plan before coding — one paragraph is enough; skip only for single-line fixes
+- Validation strategy defined in Phase 2, executed in Phase 4 — never skip
+- Atomic changes — one logical change per PR/commit
+- Show evidence — share command output, test counts, coverage %; never just "it works"
+- Use specialists — delegate via Task subagent when the scope fits a specialist skill

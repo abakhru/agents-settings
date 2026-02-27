@@ -102,26 +102,12 @@ Verification: run k6 burst test, assert 429 after 5 rapid requests."
 
 ### Link discovered work with `discovered-from`
 
-When a task reveals follow-up work (during exploration, code review, test failure, or AI analysis), link the new task back to the one that surfaced it:
-
 ```bash
-# Original task
-bd create "Explore authentication flows" -p 1
-# → bd-a1b2
-
-# Work discovered while doing bd-a1b2
-bd create "Token refresh endpoint missing CSRF protection" -p 0
-# → bd-c3d4
-
-# Link: c3d4 was discovered while working on a1b2
-bd dep add bd-c3d4 bd-a1b2 --type discovered-from
-
-# More examples
-bd dep add bd-e5f6 bd-a1b2 --type discovered-from  # another finding from same task
-bd dep add bd-g7h8 bd-c3d4 --type discovered-from  # finding from a finding
+bd create "Token refresh missing CSRF protection" -p 0  # → bd-c3d4
+bd dep add bd-c3d4 bd-a1b2 --type discovered-from       # found while working on bd-a1b2
 ```
 
-This creates an audit trail: you can always trace any task back to the work that surfaced it.
+Every task discovered during another task must be linked — this creates a full audit trail.
 
 ---
 
@@ -191,21 +177,9 @@ Work is **not complete** until all steps below are done. Never hand off without 
 
 ---
 
-## Storing AI Planning Output
+## Planning Output
 
-All AI-generated planning documents, session notes, analysis outputs, and exploration artifacts go in `history/`:
-
-```
-history/
-├── 2026-02-26-auth-exploration.md     # exploratory session output
-├── 2026-02-26-pm-prd-v1.md            # PM's PRD draft before it's approved
-├── 2026-02-27-security-findings.md    # security engineer's raw findings
-└── 2026-02-27-architect-spike.md      # architecture spike notes
-```
-
-File naming: `YYYY-MM-DD-<description>.md`
-
-`history/` is append-only — never edit existing files, only add new ones. Add `history/` to `.gitignore` if it contains sensitive findings; commit it for team visibility otherwise.
+Goes in `history/YYYY-MM-DD-<description>.md` — append-only, never in the repo root.
 
 ---
 
@@ -220,43 +194,16 @@ bd dep add <new> <old> --type supersedes              # new replaces old approac
 
 ---
 
-## justfile targets
-
-Add these to every project justfile:
-
-```justfile
-# Show unblocked tasks — run before any session
-tasks:
-    @bd ready --json | jq -r '.[] | "\(.id)\t\(.priority)\t\(.title)"'
-
-# Create a task (usage: just task "Title" [priority 0-3])
-task title priority="1":
-    bd create "{{title}}" -p {{priority}}
-
-# Claim a task
-claim id:
-    bd update {{id}} --claim
-
-# Mark done and show what's next
-done id:
-    bd update {{id}} --status done
-    @echo "Next unblocked tasks:"
-    @bd ready --json | jq -r '.[0:3] | .[] | "\(.id) \(.title)"'
-```
-
----
-
 ## Summary
 
 | Rule | Why |
 |---|---|
-| `bd ready` before every session | Prevents working on blocked or deprioritized items |
-| `--json` for programmatic output | Plain-text format is unstable; JSON is a contract |
-| Agent recommendation in every task | Next agent knows who to assign without reading the whole task |
-| Claim coordination + 10-min rule | Prevents two agents racing on the same task |
-| `discovered-from` links | Full audit trail from any task back to the work that surfaced it |
-| All tasks in `bd` | One system = no sync overhead, no duplication, no lost context |
-| Planning docs in `history/` | Keeps repo root clean; docs are findable but not clutter |
-| No markdown TODO lists | They immediately go stale and duplicate `bd` state |
-| `bd sync` before `git push` | Task graph and code stay in lockstep across agents/machines |
-| Land the plane before stopping | Nothing stranded locally; next agent has full context |
+| `bd ready` before every session | Never work on blocked or deprioritized items |
+| `--json` always | Plain-text output format is unstable |
+| Agent recommendation in every task | Next agent knows who to assign at a glance |
+| Claim + 10-min takeover rule | Prevents two agents racing on the same task |
+| `discovered-from` links | Full audit trail from any task to the work that surfaced it |
+| `bd sync` before `git push` | Task graph and code stay in lockstep |
+| Planning docs in `history/` | Keeps repo root clean |
+| No markdown TODO lists | They go stale and duplicate `bd` |
+| Land the plane | Nothing stranded locally; next agent has full context |
