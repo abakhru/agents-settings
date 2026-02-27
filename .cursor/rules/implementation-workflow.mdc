@@ -1,0 +1,125 @@
+---
+description: 5-phase implementation workflow — Plan, Validate Strategy, Implement, Verify, Complete. Apply for any non-trivial code change, feature addition, bug fix, or infrastructure change.
+alwaysApply: true
+---
+
+# Implementation and Validation Workflow
+
+**CRITICAL**: Before writing any code, follow this 5-phase workflow. Skipping phases creates technical debt and undetected regressions.
+
+---
+
+## Phase 1 — Plan
+
+- **Understand the requirement**: what exactly needs to change?
+- **Identify affected components**: which files, modules, services, or systems?
+- **Check for a specialist agent**: could a specialist from the team handle this better? (`staff-test-engineer`, `devops-engineer`, `backend-python`, etc.)
+- **Design the approach**: implementation strategy, data flow, edge cases.
+
+Write the plan out before touching any code. A one-paragraph plan is fine; skip the plan only for single-line fixes.
+
+---
+
+## Phase 2 — Validation Strategy
+
+**Define how you will verify correctness before you write a single line of implementation code.**
+
+Pick the applicable checks for the change type:
+
+| Change type | Validation methods |
+|---|---|
+| Backend API | unit tests + integration tests against real service + contract test |
+| Frontend / UI | E2E with Playwright + screenshot/trace on failure + visual diff |
+| Performance | k6 load test with thresholds (`p95 < 500ms`, error rate `< 1%`) |
+| Security | `osv-scanner` (deps), `trivy` (Docker), OWASP ZAP (API) |
+| Infrastructure / Docker | `docker build`, `trivy image`, local container smoke test |
+| CI/CD | `just ci-lint`, dry-run in CI, deploy to staging |
+| Scripts / justfile | execute with representative inputs; check exit codes |
+| Documentation | verify links, render locally, check technical accuracy |
+
+Write the validation checklist *before* Phase 3. You will execute it in Phase 4.
+
+---
+
+## Phase 3 — Implementation
+
+- Implement following the plan from Phase 1.
+- **Atomic changes** — one logical change per PR/commit. Don't mix unrelated edits.
+- Follow all rules in `coding-principles.mdc`, `python-tooling.mdc`, `docker.mdc`, etc.
+- Add error handling, logging, and documentation as you go — not as an afterthought.
+
+---
+
+## Phase 4 — Verification
+
+**Execute every item from your Phase 2 checklist.** Don't skip items because "it probably works".
+
+```bash
+# Common verification sequence (adapt to your stack)
+just test                  # unit + integration tests
+just lint                  # linters
+just format-check          # formatting
+just security-scan         # osv-scanner + trivy
+just docker-build          # if Dockerfile changed
+```
+
+- If any check fails: **fix it immediately**, then re-run from the top of the checklist.
+- Do not consider Phase 4 complete until every check passes.
+- Show evidence (command output, test counts, coverage %) to the user.
+
+---
+
+## Phase 5 — Completion
+
+1. Run the full quality gate one final time.
+2. Verify `git status` — only intended files changed.
+3. Mark Beads task done: `bd update <id> --status done`.
+4. Create follow-up tasks for anything deferred.
+5. Land the plane: `git pull --rebase && bd sync && git push`.
+
+---
+
+## Example
+
+**Bad** (never do this):
+```
+User: Add rate limiting to /auth/login
+Agent: *immediately writes middleware code*
+Agent: Done! I added the middleware.
+```
+
+**Good** (always do this):
+```
+User: Add rate limiting to /auth/login
+
+Agent:
+**Plan:**
+1. Add Redis-backed rate limiter middleware
+2. Apply to /auth/login route (5 req/min per IP)
+3. Return 429 with Retry-After header on breach
+
+**Validation strategy:**
+- mix test test/auth/rate_limit_test.exs
+- k6 burst test: 10 reqs in 1s → assert 429 after req #5
+- mix credo
+- trivy image (if Docker changed)
+
+*[implements, then runs each validation step]*
+
+**Verification results:**
+✓ mix test — 12 passed, 0 failed
+✓ k6 burst — 429 returned at req 6, Retry-After: 58
+✓ mix credo — no issues
+All checks passed. Pushing.
+```
+
+---
+
+## Key Principles
+
+1. **Never skip validation** — every code change must be verified before completion
+2. **Plan first** — know your approach and validation strategy before writing code
+3. **Atomic changes** — one logical change per implementation cycle
+4. **Fix issues immediately** — don't accumulate technical debt
+5. **Show evidence** — share validation output with the user, not just "it works"
+6. **Use specialists** — delegate to a Task subagent when the scope fits a specialist skill

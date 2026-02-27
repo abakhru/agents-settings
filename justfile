@@ -9,6 +9,7 @@ rules_link     := home / ".cursor/rules"
 claude_src     := justfile_directory() / "CLAUDE.md"
 claude_link    := home / ".claude/CLAUDE.md"
 templates_src  := justfile_directory() / ".cursor/skills/memory-manager/templates"
+discord_config := justfile_directory() / "config/discord.env"
 
 # Show available commands
 default:
@@ -278,3 +279,107 @@ check:
     check_link "CLAUDE" "{{claude_link}}" "{{claude_src}}" link-claude || errors=$((errors+1))
 
     exit $errors
+
+# ── Discord Notifications ─────────────────────────────────────────────────────
+# Config: copy config/discord.env.example → config/discord.env and fill in webhooks.
+# All targets are no-ops if config/discord.env does not exist (safe to call unconditionally).
+
+# Send a plain-text message to the updates channel
+# Usage: just notify "message"
+notify msg:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cfg="{{discord_config}}"
+    if [ ! -f "$cfg" ]; then
+        echo "⚠ Discord not configured — copy config/discord.env.example → config/discord.env"
+        exit 0
+    fi
+    source "$cfg"
+    url="${DISCORD_WEBHOOK_UPDATES:-}"
+    if [ -z "$url" ]; then echo "⚠ DISCORD_WEBHOOK_UPDATES not set in $cfg"; exit 0; fi
+    username="${DISCORD_USERNAME:-amit-ai-team}"
+    avatar="${DISCORD_AVATAR_URL:-}"
+    payload=$(jq -n \
+        --arg content "{{msg}}" \
+        --arg username "$username" \
+        --arg avatar "$avatar" \
+        '{content: $content, username: $username} + (if $avatar != "" then {avatar_url: $avatar} else {} end)')
+    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" \
+        -H "Content-Type: application/json" \
+        -d "$payload" | grep -q "^2" && echo "✓ Discord notification sent" || echo "✗ Discord POST failed"
+
+# Send an alert to the alerts channel (falls back to updates channel)
+# Usage: just alert "message"
+alert msg:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cfg="{{discord_config}}"
+    if [ ! -f "$cfg" ]; then
+        echo "⚠ Discord not configured — copy config/discord.env.example → config/discord.env"
+        exit 0
+    fi
+    source "$cfg"
+    url="${DISCORD_WEBHOOK_ALERTS:-${DISCORD_WEBHOOK_UPDATES:-}}"
+    if [ -z "$url" ]; then echo "⚠ No alert webhook set in $cfg"; exit 0; fi
+    username="${DISCORD_USERNAME:-amit-ai-team}"
+    avatar="${DISCORD_AVATAR_URL:-}"
+    payload=$(jq -n \
+        --arg content ":warning: {{msg}}" \
+        --arg username "$username" \
+        --arg avatar "$avatar" \
+        '{content: $content, username: $username} + (if $avatar != "" then {avatar_url: $avatar} else {} end)')
+    curl -s -o /dev/null -w "%{http_code}" -X POST "$url" \
+        -H "Content-Type: application/json" \
+        -d "$payload" | grep -q "^2" && echo "✓ Discord alert sent" || echo "✗ Discord POST failed"
+
+# Post latest handoff summary from memory/handoffs.md to Discord
+# Usage: just notify-handoff [agent] [path]   agent defaults to last updated section, path to "."
+notify-handoff agent="" path=".":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    handoffs="{{path}}/memory/handoffs.md"
+    if [ ! -f "$handoffs" ]; then
+        echo "✗ No memory/handoffs.md at {{path}} — run: just memory-init {{path}}"
+        exit 1
+    fi
+    if [ -n "{{agent}}" ]; then
+        # Extract the named agent's section (from its ## heading to the next ##)
+        msg=$(awk '/^## {{agent}}/{found=1} found && /^## / && !/^## {{agent}}/{exit} found{print}' "$handoffs" | head -30)
+    else
+        # Use the last 20 lines of the file (most recently updated section)
+        msg=$(tail -20 "$handoffs")
+    fi
+    if [ -z "$msg" ]; then
+        echo "⚠ No handoff content found for agent '{{agent}}'"
+        exit 0
+    fi
+    just notify "$msg"
+
+# Post task completion notice to Discord
+# Usage: just notify-done <task-id>
+notify-done id:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v bd &>/dev/null; then
+        echo "⚠ bd not found"; exit 0
+    fi
+    info=$(bd show {{id}} --json 2>/dev/null | jq -r '"Task done: [" + .id + "] " + .title + " (P" + (.priority|tostring) + ")"' 2>/dev/null || echo "Task {{id}} marked done")
+    just notify "$info"
+
+# Show Discord config status
+discord-status:
+    #!/usr/bin/env bash
+    cfg="{{discord_config}}"
+    if [ ! -f "$cfg" ]; then
+        echo "✗ config/discord.env not found"
+        echo "  Setup: cp config/discord.env.example config/discord.env"
+        echo "         then fill in your webhook URL(s)"
+        exit 0
+    fi
+    source "$cfg"
+    echo "=== Discord config ($cfg) ==="
+    echo ""
+    [ -n "${DISCORD_WEBHOOK_UPDATES:-}" ] && echo "✓ DISCORD_WEBHOOK_UPDATES  set" || echo "✗ DISCORD_WEBHOOK_UPDATES  not set"
+    [ -n "${DISCORD_WEBHOOK_ALERTS:-}"  ] && echo "✓ DISCORD_WEBHOOK_ALERTS   set" || echo "  DISCORD_WEBHOOK_ALERTS   not set (falls back to UPDATES)"
+    [ -n "${DISCORD_USERNAME:-}"        ] && echo "✓ DISCORD_USERNAME         ${DISCORD_USERNAME}" || echo "  DISCORD_USERNAME         not set (default: amit-ai-team)"
+    [ -n "${DISCORD_AVATAR_URL:-}"      ] && echo "✓ DISCORD_AVATAR_URL       set" || echo "  DISCORD_AVATAR_URL       not set (Discord default)"

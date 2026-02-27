@@ -24,32 +24,52 @@ Install Beads once: `bun install -g @beads/bd`. Initialize per project: `just me
 5. Skim `memory/open-questions.md` — check for questions assigned to you.
 6. Skim the last 5 entries in `memory/decisions.md` — catch recent decisions.
 
-### Session End (always do this last)
+### Session End — Landing the Plane (always do this last)
 
-1. **`bd update <id> --status done`** — mark your task complete.
-2. **`bd create "..." -p N`** — create follow-up tasks discovered this session; link deps with `bd dep add`.
-3. Replace your section in `memory/handoffs.md` with a concise summary (≤15 lines).
-4. Append any key decisions to `memory/decisions.md` (newest at top).
-5. Update `memory/open-questions.md` — add new questions, mark resolved ones.
-6. Update the "Last activity" line in `memory/CONTEXT.md`.
+Work is **not complete** until all of these are done. Never stop mid-session without finishing this.
+
+1. **File `bd` tasks for any remaining work** — nothing should live in your head or a scratch file.
+2. **Run quality gates** — tests, linters, builds. Fix failures before pushing.
+3. **`bd update <id> --status done`** — mark your task complete.
+4. **`bd create "..." -p N`** — create follow-up tasks discovered this session; link deps with `bd dep add`.
+5. **Sync and push**:
+   ```bash
+   git pull --rebase
+   bd sync            # push Beads graph to remote so other agents see task state
+   git push
+   git status         # must show "up to date with origin"
+   ```
+6. Replace your section in `memory/handoffs.md` with a concise summary (≤15 lines).
+7. Append any key decisions to `memory/decisions.md` (newest at top).
+8. Update `memory/open-questions.md` — add new questions, mark resolved ones.
+9. Update the "Last activity" line in `memory/CONTEXT.md`.
+
+**NEVER** say "ready to push when you are" — you must push. Work is not done until `git push` succeeds.
 
 ### Key Beads commands
 
 ```bash
 bd ready --json                                          # unblocked tasks — always --json for programmatic use
+bd list --status in_progress --json                      # check what's already claimed before starting
 bd create "Title" -p 1                                   # create task (P0 critical … P3 low)
 bd update <id> --claim                                   # claim atomically
 bd update <id> --status done                             # mark complete
 bd dep add <child> <parent>                              # block child until parent done
 bd dep add <found-id> <source-id> --type discovered-from # link work discovered during another task
 bd show <id> --json                                      # full task + audit trail
-bd list --status in_progress --json                      # what's in flight
+bd sync                                                  # push Beads graph to remote (run before git push)
 ```
 
 ### Beads rules (always apply)
 
 - **`bd ready --json` before every session** — never ask "what should I work on?" without running it first
+- **Check `bd list --status in_progress --json`** — see what other agents are already working on
 - **`--json` for all programmatic output** — plain-text format is for humans; use `--json` in scripts and AI reasoning
+- **Agent recommendation in every task** — always include `Recommended Agent: <name>` in the task description
+- **Claim with a note** — append `[Claimed by <agent> at <timestamp>]` to the description when you claim
+- **10-minute takeover** — if a task is `in_progress` with no claim note in the last 10 min, you may take it
+- **`bd sync` before `git push`** — keeps task graph and code in lockstep across agents and machines
+- **Land the plane** — `bd sync && git push` before every session end; work is not done until pushed
 - **`discovered-from` for all follow-up work** — any task found during another task must be linked back with `bd dep add <new> <source> --type discovered-from`
 - **No markdown TODO lists** — everything trackable goes in `bd`, nowhere else
 - **No external trackers** — `bd` is the only system; no GitHub Issues, Jira, Linear, or Notion alongside it

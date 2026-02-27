@@ -33,13 +33,28 @@ alwaysApply: true
 
 ```bash
 # Always check this first — never ask "what should I work on?" without running it
-bd ready
+bd ready --json
 
-# Claim before touching any code
+# Check what's already in progress (another agent may have started it)
+bd list --status in_progress --json
+
+# Claim before touching any code — mark yourself as the owner in the description too
 bd update <id> --claim
 ```
 
 `bd ready` shows tasks with no open blockers. If it returns nothing, create or unblock tasks before writing a single line.
+
+### Claim coordination
+
+When claiming a task, **append a note to its description** marking yourself as the active agent:
+
+```bash
+bd update <id> --description "$(bd show <id> --json | jq -r .description)
+
+[Claimed by <agent-name> at $(date -u +%Y-%m-%dT%H:%M:%SZ)]"
+```
+
+**10-minute takeover rule**: If a task shows `in_progress` but its description has no claim note within the last 10 minutes, assume it was abandoned and take it. Verify with `bd show <id> --json` before proceeding.
 
 ---
 
@@ -54,6 +69,36 @@ bd create "Fix checkout crash on empty cart" -p 0
 bd create "Add unit tests for auth middleware" -p 1
 bd create "Improve error message copy" -p 3
 ```
+
+### Always recommend the specialist agent in the description
+
+Every task description must include a **Recommended Agent** line so the next agent knows who should pick it up without reading the whole description.
+
+```bash
+bd create "Add rate limiting to /auth/login" -p 1 \
+  --description "Recommended Agent: security-test-engineer
+
+Current state: /auth/login has no rate limiting; brute-force attacks are possible.
+Target: max 5 attempts per IP per minute; 429 response with Retry-After header.
+Verification: run k6 burst test, assert 429 after 5 rapid requests."
+```
+
+**Agent selection quick-reference:**
+
+| Task type | Recommended agent |
+|---|---|
+| Test strategy, risk analysis, quality gates | `staff-test-engineer` |
+| Test implementation, bug reports, flaky fixes | `junior-test-engineer` |
+| Load / stress / capacity testing | `performance-stress-test-engineer` |
+| Framework design, CI/CD test integration | `test-automation-architect` |
+| REST/GraphQL/Pact contract tests | `api-contract-test-engineer` |
+| OWASP, auth/authz, SAST/DAST | `security-test-engineer` |
+| iOS/Android automation | `mobile-test-engineer` |
+| Feature discovery, SFDIPOT, SBET sessions | `exploratory-test-engineer` |
+| CI/CD pipelines, Docker/K8s, infra | `devops-engineer` |
+| FastAPI, Pydantic, SQLAlchemy, backend | `backend-python` |
+| PRDs, acceptance criteria, prioritization | `product-manager` |
+| User flows, components, design tokens, a11y | `ui-ux-designer` |
 
 ### Link discovered work with `discovered-from`
 
@@ -112,6 +157,37 @@ bd update <id> --status done
 bd create "Follow-up: ..." -p N
 bd dep add <new-id> <done-id> --type discovered-from
 ```
+
+---
+
+## Landing the Plane (Session Completion)
+
+Work is **not complete** until all steps below are done. Never hand off without finishing this checklist.
+
+### Mandatory end-of-session workflow
+
+1. **File `bd` tasks for any remaining or follow-up work** — nothing should live in your head or a scratch file.
+2. **Run quality gates** — tests, linters, builds. Fix failures before pushing.
+3. **Update task statuses** — close finished tasks (`--status done`), update in-progress items with notes.
+4. **Sync Beads and push code** — in this exact order:
+
+   ```bash
+   git pull --rebase
+   bd sync            # push Beads graph to remote so other agents see task state
+   git push
+   git status         # must show "up to date with origin"
+   ```
+
+5. **Update `memory/handoffs.md`** — replace your section with a ≤15-line summary for the next agent.
+6. **Verify** — confirm all changes are committed AND pushed; nothing stranded locally.
+
+### Critical rules
+
+- **Work is NOT complete until `git push` succeeds**
+- **NEVER stop before pushing** — that leaves work stranded locally
+- **NEVER say "ready to push when you are"** — you must push
+- **Always `bd sync` before `git push`** — keeps task graph and code in lockstep
+- **If push fails**, resolve the conflict and retry until it succeeds
 
 ---
 
@@ -176,7 +252,11 @@ done id:
 |---|---|
 | `bd ready` before every session | Prevents working on blocked or deprioritized items |
 | `--json` for programmatic output | Plain-text format is unstable; JSON is a contract |
+| Agent recommendation in every task | Next agent knows who to assign without reading the whole task |
+| Claim coordination + 10-min rule | Prevents two agents racing on the same task |
 | `discovered-from` links | Full audit trail from any task back to the work that surfaced it |
 | All tasks in `bd` | One system = no sync overhead, no duplication, no lost context |
 | Planning docs in `history/` | Keeps repo root clean; docs are findable but not clutter |
 | No markdown TODO lists | They immediately go stale and duplicate `bd` state |
+| `bd sync` before `git push` | Task graph and code stay in lockstep across agents/machines |
+| Land the plane before stopping | Nothing stranded locally; next agent has full context |

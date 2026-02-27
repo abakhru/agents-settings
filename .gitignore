@@ -1,0 +1,8 @@
+# Discord webhook secrets — copy discord.env.example → discord.env to configure
+config/discord.env
+
+# Agent session history (commit or ignore — your choice)
+# history/
+
+# macOS
+.DS_Store

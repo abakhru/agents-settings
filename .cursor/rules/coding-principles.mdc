@@ -82,6 +82,35 @@ class UserAPITest(BaseAPITest):
 
 **Parameterized Python tests** — use the `parameterized` library (https://pypi.org/project/parameterized/) for data-driven test cases instead of duplicating test methods.
 
+**Tests must trace back to the issue** — every test case must reference the feature or bug it covers. Include the `bd` task ID and a one-line summary of the requirement in the test docstring or a top-of-file comment block.
+
+```python
+# ✅ test with traceability
+class CheckoutFlowTest(BaseAPITest):
+    """
+    Feature: Checkout flow — bd-a1b2
+    Covers: user can complete purchase with a valid card; empty cart is rejected.
+    """
+
+    def test_checkout_success(self):
+        """bd-a1b2 — valid card payment completes checkout and returns order ID."""
+        ...
+
+    def test_checkout_empty_cart(self):
+        """bd-a1b2 — empty cart returns 422 before reaching payment gateway."""
+        ...
+```
+
+```typescript
+// ✅ Playwright E2E with traceability
+/**
+ * Feature: Checkout flow — bd-a1b2
+ * Covers: happy path, empty cart rejection
+ */
+test('bd-a1b2 — valid card completes checkout', async ({ page }) => { ... });
+test('bd-a1b2 — empty cart shows validation error', async ({ page }) => { ... });
+```
+
 ```python
 from parameterized import parameterized
 
