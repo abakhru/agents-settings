@@ -376,13 +376,22 @@ discord-setup token="" guild="":
                                      data=json.dumps(body).encode() if body else None)
         try:
             with urllib.request.urlopen(req) as r:
-                return json.loads(r.read())
+                raw = r.read()
+                return json.loads(raw)
+        except json.JSONDecodeError:
+            print(f"✗ Discord returned non-JSON for {method} {path}")
+            print(f"  Raw response: {raw[:500]}")
+            sys.exit(1)
         except urllib.error.HTTPError as e:
-            detail = json.loads(e.read())
+            raw = e.read()
             hints = {401: "invalid token", 403: "bot not in server or missing Manage Webhooks",
                      404: "wrong guild ID"}
             print(f"✗ HTTP {e.code} — {hints.get(e.code, e.reason)}")
-            print(f"  Discord says: {detail.get('message', detail)}")
+            try:
+                detail = json.loads(raw)
+                print(f"  Discord says: {detail.get('message', detail)}")
+            except json.JSONDecodeError:
+                print(f"  Raw response: {raw[:500]}")
             if e.code in (401, 403):
                 print("\nChecklist:")
                 print("  1. Invite bot via OAuth2 → URL Generator (scope: bot, perm: Manage Webhooks)")
