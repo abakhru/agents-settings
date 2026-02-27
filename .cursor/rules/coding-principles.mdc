@@ -178,6 +178,27 @@ rg "pattern" --no-ignore        # include .gitignore'd files
 
 Never use `grep` in scripts, justfile targets, or documentation examples — always `rg`.
 
+## Git Commits
+
+**Short and crisp** — subject line ≤72 chars, imperative mood, no period. Body only when the why isn't obvious.
+
+**Never include tool footers** — always strip any auto-appended lines such as:
+- `🤖 Generated with [Claude Code](https://claude.ai/code)`
+- `Co-Authored-By: Claude`
+- `Made with Cursor`
+- Any `Co-authored-by:` trailer added by an AI tool
+
+```bash
+# ❌
+fix auth token refresh
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+# ✅
+fix auth token refresh
+```
+
 ## Performance Testing
 
 **Always use k6** for performance and load tests. JavaScript-based, CLI-friendly, CI-ready.
