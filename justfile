@@ -4,6 +4,8 @@
 home           := env_var("HOME")
 skills_src     := justfile_directory() / ".cursor/skills"
 skills_link    := home / ".cursor/skills"
+rules_src      := justfile_directory() / ".cursor/rules"
+rules_link     := home / ".cursor/rules"
 claude_src     := justfile_directory() / "CLAUDE.md"
 claude_link    := home / ".claude/CLAUDE.md"
 templates_src  := justfile_directory() / ".cursor/skills/memory-manager/templates"
@@ -14,9 +16,10 @@ default:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-# First-time setup on a new machine: create both symlinks (skills + CLAUDE.md)
+# First-time setup on a new machine: create all three symlinks (skills + rules + CLAUDE.md)
 setup:
     just link-skills
+    just link-rules
     just link-claude
     @echo ""
     @echo "Setup complete. Run 'just status' to verify."
@@ -39,6 +42,25 @@ link-skills:
     fi
     ln -s "{{skills_src}}" "{{skills_link}}"
     echo "✓ Linked {{skills_link}} → {{skills_src}}"
+
+# Create ~/.cursor/rules → this repo's .cursor/rules/ (live symlink — no sync needed)
+link-rules:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -L "{{rules_link}}" ]; then
+        current=$(readlink "{{rules_link}}")
+        if [ "$current" = "{{rules_src}}" ]; then
+            echo "✓ Already linked: {{rules_link}} → {{rules_src}}"
+            exit 0
+        fi
+        echo "Updating existing symlink: $current → {{rules_src}}"
+        rm "{{rules_link}}"
+    elif [ -d "{{rules_link}}" ]; then
+        echo "Backing up existing directory → {{rules_link}}.bak"
+        mv "{{rules_link}}" "{{rules_link}}.bak"
+    fi
+    ln -s "{{rules_src}}" "{{rules_link}}"
+    echo "✓ Linked {{rules_link}} → {{rules_src}}"
 
 # Create ~/.claude/CLAUDE.md → this repo's CLAUDE.md (live symlink)
 link-claude:
@@ -201,67 +223,58 @@ in-progress:
 
 # ── Status / Verify ───────────────────────────────────────────────────────────
 
-# Show symlink status for both skills and CLAUDE.md
+# Show symlink status for skills, rules, and CLAUDE.md
 status:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    echo "=== Skills symlink ==="
-    if [ -L "{{skills_link}}" ]; then
-        target=$(readlink "{{skills_link}}")
-        if [ "$target" = "{{skills_src}}" ]; then
-            echo "✓ {{skills_link}} → $target"
-            echo "  ($(ls "{{skills_link}}" | wc -l | tr -d ' ') skills)"
+    check_link() {
+        local label="$1" link="$2" expected="$3" fix="$4"
+        if [ -L "$link" ]; then
+            target=$(readlink "$link")
+            if [ "$target" = "$expected" ]; then
+                count=""
+                [ -d "$link" ] && count="  ($(ls "$link" | wc -l | tr -d ' ') files)"
+                echo "✓ $link → $target$count"
+            else
+                echo "⚠ $link → $target  (expected $expected)"
+            fi
         else
-            echo "⚠ {{skills_link}} → $target  (expected {{skills_src}})"
+            echo "✗ $link is not a symlink — run: just $fix"
         fi
-    else
-        echo "✗ {{skills_link}} is not a symlink — run: just link-skills"
-    fi
+    }
 
+    echo "=== Cursor skills ===" && check_link skills "{{skills_link}}" "{{skills_src}}" link-skills
     echo ""
-    echo "=== CLAUDE.md symlink ==="
-    if [ -L "{{claude_link}}" ]; then
-        target=$(readlink "{{claude_link}}")
-        if [ "$target" = "{{claude_src}}" ]; then
-            echo "✓ {{claude_link}} → $target"
-        else
-            echo "⚠ {{claude_link}} → $target  (expected {{claude_src}})"
-        fi
-    else
-        echo "✗ {{claude_link}} is not a symlink — run: just link-claude"
-    fi
+    echo "=== Cursor rules ===" && check_link rules "{{rules_link}}" "{{rules_src}}" link-rules
+    echo ""
+    echo "=== CLAUDE.md ===" && check_link claude "{{claude_link}}" "{{claude_src}}" link-claude
 
-# Verify both symlinks are correct (exits non-zero if either is broken)
+# Verify all three symlinks are correct (exits non-zero if any is broken)
 check:
     #!/usr/bin/env bash
     set -euo pipefail
     errors=0
 
-    if [ ! -L "{{skills_link}}" ]; then
-        echo "✗ {{skills_link}} is not a symlink — run: just link-skills"
-        errors=$((errors+1))
-    else
-        target=$(readlink "{{skills_link}}")
-        if [ "$target" != "{{skills_src}}" ]; then
-            echo "✗ Skills wrong target: $target (expected {{skills_src}})"
-            errors=$((errors+1))
-        else
-            echo "✓ Skills symlink OK  ($(ls "{{skills_link}}" | wc -l | tr -d ' ') skills)"
+    check_link() {
+        local label="$1" link="$2" expected="$3" fix="$4"
+        if [ ! -L "$link" ]; then
+            echo "✗ $link is not a symlink — run: just $fix"
+            return 1
         fi
-    fi
+        target=$(readlink "$link")
+        if [ "$target" != "$expected" ]; then
+            echo "✗ $label wrong target: $target (expected $expected)"
+            return 1
+        fi
+        count=""
+        [ -d "$link" ] && count=" ($(ls "$link" | wc -l | tr -d ' ') files)"
+        echo "✓ $label symlink OK$count"
+        return 0
+    }
 
-    if [ ! -L "{{claude_link}}" ]; then
-        echo "✗ {{claude_link}} is not a symlink — run: just link-claude"
-        errors=$((errors+1))
-    else
-        target=$(readlink "{{claude_link}}")
-        if [ "$target" != "{{claude_src}}" ]; then
-            echo "✗ CLAUDE.md wrong target: $target (expected {{claude_src}})"
-            errors=$((errors+1))
-        else
-            echo "✓ CLAUDE.md symlink OK"
-        fi
-    fi
+    check_link "Skills" "{{skills_link}}" "{{skills_src}}" link-skills || errors=$((errors+1))
+    check_link "Rules"  "{{rules_link}}"  "{{rules_src}}"  link-rules  || errors=$((errors+1))
+    check_link "CLAUDE" "{{claude_link}}" "{{claude_src}}" link-claude || errors=$((errors+1))
 
     exit $errors

@@ -68,7 +68,7 @@ Check memory status anytime: `just memory-status` | See unblocked tasks: `just t
 
 ### In Cursor
 
-Skills are loaded automatically from `.cursor/skills/` in this repo (project-scoped) and from `~/.cursor/skills/` (personal, all projects).
+Both `~/.cursor/skills` and `~/.cursor/rules` are symlinks into this repo. Edits to any skill or rule file are live instantly — no sync step required.
 
 **Start with the orchestrator** for any broad request:
 
@@ -81,6 +81,8 @@ Skills are loaded automatically from `.cursor/skills/` in this repo (project-sco
 > "As the devops engineer, write a GitHub Actions pipeline for this service."
 
 You can also @-mention a skill file directly: `@.cursor/skills/staff-test-engineer/SKILL.md`
+
+**First-time machine setup**: `just setup` — creates both symlinks (`~/.cursor/skills` → repo and `~/.claude/CLAUDE.md` → repo).
 
 ### With Claude CLI (`claude`)
 
@@ -328,15 +330,15 @@ All specialists operate under the same conventions. Key sections:
 
 ---
 
-## Adding or Updating Skills
+## Adding or Updating Skills and Rules
 
-1. Edit the SKILL.md in `.cursor/skills/<skill-name>/`
-2. Sync to global Cursor skills:
-   ```bash
-   cp -r .cursor/skills/<skill-name> ~/.cursor/skills/
-   ```
-3. For the orchestrator or any skill referenced in `CLAUDE.md`, also update that file (it must be self-contained — no relative links). `~/.claude/CLAUDE.md` is a symlink to `CLAUDE.md` in this repo, so edits here are immediately picked up by Claude CLI.
-4. Download new skills if/when needed from https://mcpmarket.com/search?type=skills&q=testing
+**Skills**: edit `.cursor/skills/<skill-name>/SKILL.md` — live instantly via symlink.
+
+**Rules**: edit `.cursor/rules/<name>.mdc` — live instantly via symlink.
+
+**CLAUDE.md**: edit `CLAUDE.md` in this repo — live instantly via symlink to `~/.claude/CLAUDE.md`.
+
+No sync step needed for any of them. On a new machine, run `just setup` to create all three symlinks.
 
 To add a new skill, follow the structure in any existing `SKILL.md`: YAML frontmatter (`name`, `description`), then markdown sections with checklists and output formats. Keep it under 200 lines; use progressive disclosure with reference files for detail.
 
