@@ -36,11 +36,82 @@ Operate as a junior test engineer: implement tests from specs, follow existing p
 - If requirements are vague, implement the obvious interpretation and note assumptions.
 - Flag missing or conflicting requirements instead of guessing critical behavior.
 
-## Fixing Flaky or Failing Tests
+## UI Test Failure — Recording Analysis & Fix Suggestions
+
+When a UI (E2E or component) test fails, **do not just re-run or disable it**. Follow this protocol:
+
+### 1. Collect artifacts
+
+```bash
+# Playwright artifacts at:
+test-results/<test-name>/video.webm      # full session recording
+test-results/<test-name>/screenshot.png  # frame at failure point
+test-results/<test-name>/trace.zip       # DOM + network + console
+
+bunx playwright show-trace test-results/<test-name>/trace.zip
+bunx playwright show-report
+```
+
+### 2. Analyze the recording
+
+Watch the video and inspect the trace:
+- What was the UI state at the exact frame where the assertion failed?
+- Was the element missing, hidden, wrong text, wrong style, or obscured?
+- Did a network call return unexpected data?
+- Was there an animation or transition that caused a timing issue?
+
+### 3. Cross-reference with design spec
+
+Check `memory/handoffs.md` → Designer section. Compare expected vs recorded:
+- Element, label, and accessible role
+- Layout, styling, and component state
+- Interaction behavior and animation
+
+### 4. Produce a UI Fix Suggestion
+
+Always output a structured fix suggestion before filing a bug or raising a PR comment:
+
+```markdown
+## UI Fix Suggestion — [TestName]
+
+**Test**: `tests/e2e/[file].spec.ts` → `[test name]`
+**Failure**: [exact assertion that failed]
+**Artifacts**: video.webm | screenshot.png | trace.zip
+
+### Visual Analysis
+[What was visible at failure — UI state, element condition, what happened before]
+
+### Root Cause
+[missing element | wrong selector | timing/animation | style regression |
+data not loaded | wrong component state | layout overflow | a11y failure]
+
+### Design Spec vs Actual
+| Aspect | Expected | Actual (from recording) |
+|---|---|---|
+| [element] | [spec] | [observed] |
+
+### Proposed Fix
+**File**: [path/to/component]
+**Type**: [CSS | component logic | selector | timing | data]
+[code diff showing the fix]
+**Confidence**: High / Medium / Low
+
+### Handoff → [Designer | Backend Python | Architect]
+[what action is needed and why]
+```
+
+### 5. Fix or escalate
+
+- **Test-side issue** (wrong locator, timing, flaky assertion): fix the test.
+  Prefer `getByRole()` > `getByLabel()` > `getByTestId()`. Never use CSS class selectors.
+- **Product UI bug** (missing element, wrong state, style regression): file bug with Fix Suggestion; hand off to Designer (styling) or Backend Python (data).
+- **Genuine flakiness**: add retry logic or explicit `waitFor`; never use `page.waitForTimeout()`.
+
+## Fixing Flaky or Failing Tests (non-UI)
 
 1. Reproduce locally or in CI; capture logs and stack trace.
 2. Determine cause: timing, shared state, environment, or product bug.
-3. Fix: add waits/synchronization, isolate state, or adjust assertions. Prefer fixing the test over disabling unless it’s a known product issue.
+3. Fix: add waits/synchronization, isolate state, or adjust assertions. Prefer fixing over disabling.
 4. If disabling or skipping: add a ticket or comment explaining why and when to re-enable.
 
 ## Bug Reports

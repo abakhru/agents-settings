@@ -16,6 +16,7 @@ These apply to all code and tests produced by any specialist.
 | **Parameterized Python tests** | Use the [`parameterized`](https://pypi.org/project/parameterized/) library for data-driven test cases. Never duplicate test methods for different inputs. |
 | **Performance testing** | Always use **k6**. No Locust or Gatling unless the project already uses them. |
 | **Atomic & independent tests** | Every test runs in any order, in isolation, and produces the same result. No test depends on state left by another. |
+| **UI test recording** | All E2E and component tests must use `video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`, and `trace: 'retain-on-failure'` in Playwright config. On failure, produce a UI Fix Suggestion before filing a bug or disabling the test. |
 | **Always clean up** | `tearDown` (or fixture finalizer) undoes every side effect: created data, open connections, written files, changed shared state. |
 | **Python linting** | **ruff** — line length 120, double quotes. Config in `pyproject.toml`. Replaces flake8, black, and isort. |
 | **Python type checking** | **ty** (Astral). All new code must be fully annotated. No bare `Any` without a comment. |
@@ -24,7 +25,7 @@ These apply to all code and tests produced by any specialist.
 | **uv** | Use `uv` for all new Python projects. Never use bare `pip`, `pip-tools`, or `poetry`. |
 | **bun** | Use `bun` for all JavaScript/TypeScript projects. Never use `npm`, `yarn`, or `pnpm` for new projects. |
 | **vinext** | Use `vinext` (Cloudflare's Next.js on Vite) for all new web UI and full-stack projects. `bun add vinext`; commands: `vinext dev / build / deploy`. |
-| **beads** | Use `bd` (Beads) for all task tracking. Install: `bun install -g @beads/bd`. Init per project: `bd init`. Use `bd ready` at session start. |
+| **beads** | Use `bd` for ALL task tracking — no GitHub Issues, Jira, or markdown TODO lists. `bd ready --json` at session start. Always `--json` for programmatic output. Link discovered work with `--type discovered-from`. Store AI planning docs in `history/` (never repo root). |
 | **mise.toml** | Pin all tool versions (Python, Node, just, etc.) in `mise.toml` at repo root. Commit to git. CI calls `mise install` first. |
 | **Integration tests** | Use real services (Docker Compose, testcontainers). Mocking only in unit tests. |
 | **Dependency scanning** | **osv-scanner** — scans `uv.lock`, `package-lock.json`, etc. Runs every PR; CRITICAL blocks merge. |

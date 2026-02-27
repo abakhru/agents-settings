@@ -35,14 +35,17 @@ Use Beads for all work items: features, bugs, sub-tasks, spikes. Its dependency 
 ### Essential commands
 
 ```bash
-bd ready                          # List tasks with no open blockers — start here each session
-bd create "Title" -p 1            # Create a task (P0=critical, P1=high, P2=medium, P3=low)
-bd update <id> --claim            # Atomically claim a task (sets assignee + in_progress)
-bd dep add <child-id> <parent-id> # Block child until parent is done
-bd show <id>                      # Full task details + audit trail
-bd list --status in_progress      # What's currently in flight
-bd update <id> --status done      # Mark complete
+bd ready --json                         # Unblocked tasks — always use --json for programmatic use
+bd create "Title" -p 1                  # Create a task (P0=critical … P3=low)
+bd update <id> --claim                  # Atomically claim (sets assignee + in_progress)
+bd dep add <child> <parent>             # Block child until parent done
+bd dep add <found> <source> --type discovered-from  # Link work discovered during another task
+bd show <id> --json                     # Full task details + audit trail
+bd list --status in_progress --json     # What's in flight
+bd update <id> --status done            # Mark complete
 ```
+
+**Always use `--json` when parsing output programmatically.** Plain-text format is for humans only.
 
 ### Hierarchy
 
@@ -65,25 +68,35 @@ bd-a3f8.1.1      ← Sub-task (e.g., "Write unit tests for token validation")
 ### Session workflow with Beads
 
 ```bash
-# Session start
-bd ready                 # see what's unblocked
-bd update <id> --claim   # claim your task
+# Session start — never skip this
+bd ready --json            # see what's unblocked; --json for reliable parsing
+bd update <id> --claim     # claim before touching any code
 
 # Session end
-bd update <id> --status done   # mark complete
-bd create "..." -p N           # create follow-up tasks discovered during work
-bd dep add <new> <done>        # link dependencies for the next specialist
+bd update <id> --status done                              # mark complete
+bd create "Discovered: ..." -p N                          # any follow-up work found
+bd dep add <new-id> <done-id> --type discovered-from     # always link discovered work
 ```
+
+### Storing planning output
+
+AI-generated docs (PRD drafts, session notes, exploration output, spike results) go in `history/`:
+```
+history/YYYY-MM-DD-<description>.md
+```
+
+Never drop planning docs in the repo root. Never create markdown TODO lists — everything trackable goes in `bd`.
 
 ### AGENTS.md (add to project root)
 
 ```markdown
-## Task Tracking
-Use `bd` (Beads) for all task management. Never use a different system.
-- `bd ready` — shows unblocked tasks; start here
-- `bd update <id> --claim` — claim before starting work
-- `bd update <id> --status done` — mark complete when done
-- Do NOT create tasks in issues, markdown, or comments — use `bd`
+## Task Tracking — Beads (bd)
+- ONLY use bd for task tracking. No GitHub Issues, Jira, markdown TODO lists.
+- bd ready --json        start here every session — shows unblocked tasks
+- bd update <id> --claim     claim before starting work
+- bd update <id> --status done   mark complete when done
+- bd dep add <new> <source> --type discovered-from   link all discovered work
+- Planning docs → history/YYYY-MM-DD-<desc>.md  (never in repo root)
 ```
 
 ---
@@ -365,6 +378,11 @@ One section per specialist. **Replace your section entirely each session** — a
 |---|---|
 | Track tasks in memory/handoffs.md | Tasks go in Beads (`bd create`); handoffs.md is for knowledge |
 | Track decisions/context in Beads | Decisions go in memory/decisions.md; Beads tracks work items |
+| Create markdown TODO lists | Everything trackable goes in `bd` |
+| Use GitHub Issues or Jira alongside `bd` | One system only — `bd` |
+| Drop planning docs in the repo root | Use `history/YYYY-MM-DD-<desc>.md` |
+| Parse `bd` output without `--json` | Always `bd ready --json` for programmatic use |
+| Create follow-up tasks without linking them | Always `bd dep add <new> <source> --type discovered-from` |
 | Start without `bd ready` | Always see what's unblocked before picking up work |
 | Start without reading CONTEXT.md | Always read it first |
 | Append to handoffs.md instead of replacing your section | Replace your section entirely; it should always be current |

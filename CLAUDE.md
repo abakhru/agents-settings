@@ -36,14 +36,25 @@ Install Beads once: `bun install -g @beads/bd`. Initialize per project: `just me
 ### Key Beads commands
 
 ```bash
-bd ready                          # unblocked tasks — start here
-bd create "Title" -p 1            # create task (P0 critical … P3 low)
-bd update <id> --claim            # claim atomically
-bd update <id> --status done      # mark complete
-bd dep add <child> <parent>       # block child until parent done
-bd show <id>                      # full task + audit trail
-bd list --status in_progress      # what's in flight
+bd ready --json                                          # unblocked tasks — always --json for programmatic use
+bd create "Title" -p 1                                   # create task (P0 critical … P3 low)
+bd update <id> --claim                                   # claim atomically
+bd update <id> --status done                             # mark complete
+bd dep add <child> <parent>                              # block child until parent done
+bd dep add <found-id> <source-id> --type discovered-from # link work discovered during another task
+bd show <id> --json                                      # full task + audit trail
+bd list --status in_progress --json                      # what's in flight
 ```
+
+### Beads rules (always apply)
+
+- **`bd ready --json` before every session** — never ask "what should I work on?" without running it first
+- **`--json` for all programmatic output** — plain-text format is for humans; use `--json` in scripts and AI reasoning
+- **`discovered-from` for all follow-up work** — any task found during another task must be linked back with `bd dep add <new> <source> --type discovered-from`
+- **No markdown TODO lists** — everything trackable goes in `bd`, nowhere else
+- **No external trackers** — `bd` is the only system; no GitHub Issues, Jira, Linear, or Notion alongside it
+- **No duplicate tracking** — one task, one place, always `bd`
+- **Planning docs in `history/`** — AI planning output, session notes, spike results → `history/YYYY-MM-DD-<desc>.md`; never in repo root
 
 ### Read Map — Who Reads Whom
 
@@ -906,6 +917,7 @@ These apply to all code and tests produced by any specialist:
 - **Performance testing** — always use **k6**; Locust or Gatling only if already established in the project.
 - **Atomic & independent tests** — every test runs in any order, in isolation, with the same result; no test depends on state left by another.
 - **Always clean up in tearDown** — undo every side effect (created data, open connections, written files, changed state) in `tearDown` or an equivalent fixture finalizer.
+- **UI test recording** — all E2E and component tests must configure Playwright with `video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`, `trace: 'retain-on-failure'`. On any UI test failure: watch the video, inspect the trace, cross-reference the design spec, and produce a **UI Fix Suggestion** (root cause, design vs actual, proposed code diff, handoff to Designer/Backend/Architect) before filing a bug or disabling the test.
 - **Python linting** — **ruff** with line-length = 120 and double quotes. Replaces flake8, black, and isort. Config in `pyproject.toml`.
 - **Python type checking** — **ty** (Astral). All new Python code must be fully annotated; no bare `Any` without a comment.
 - **Task runner** — **just** for every project. `just` with no args prints available targets (`default: @just --list`). CI always calls `just <target>`, not raw commands.

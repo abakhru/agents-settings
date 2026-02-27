@@ -2,8 +2,8 @@
 # Run `just` to see all targets
 
 home           := env_var("HOME")
-skills_src     := ".cursor/skills"
-skills_dest    := home / ".cursor/skills"
+skills_src     := justfile_directory() / ".cursor/skills"
+skills_link    := home / ".cursor/skills"
 claude_src     := justfile_directory() / "CLAUDE.md"
 claude_link    := home / ".claude/CLAUDE.md"
 templates_src  := justfile_directory() / ".cursor/skills/memory-manager/templates"
@@ -14,14 +14,33 @@ default:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-# First-time setup on a new machine: link CLAUDE.md + sync all skills
+# First-time setup on a new machine: create both symlinks (skills + CLAUDE.md)
 setup:
+    just link-skills
     just link-claude
-    just sync-cursor
     @echo ""
     @echo "Setup complete. Run 'just status' to verify."
 
-# Create ~/.claude/CLAUDE.md symlink pointing to this repo
+# Create ~/.cursor/skills → this repo's .cursor/skills/ (live symlink — no sync needed)
+link-skills:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -L "{{skills_link}}" ]; then
+        current=$(readlink "{{skills_link}}")
+        if [ "$current" = "{{skills_src}}" ]; then
+            echo "✓ Already linked: {{skills_link}} → {{skills_src}}"
+            exit 0
+        fi
+        echo "Updating existing symlink: $current → {{skills_src}}"
+        rm "{{skills_link}}"
+    elif [ -d "{{skills_link}}" ]; then
+        echo "Backing up existing directory → {{skills_link}}.bak"
+        mv "{{skills_link}}" "{{skills_link}}.bak"
+    fi
+    ln -s "{{skills_src}}" "{{skills_link}}"
+    echo "✓ Linked {{skills_link}} → {{skills_src}}"
+
+# Create ~/.claude/CLAUDE.md → this repo's CLAUDE.md (live symlink)
 link-claude:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -32,28 +51,6 @@ link-claude:
     ln -sf "{{claude_src}}" "{{claude_link}}"
     echo "✓ Linked {{claude_link}} → {{claude_src}}"
 
-# ── Sync ──────────────────────────────────────────────────────────────────────
-
-# Sync all Cursor skills to ~/.cursor/skills/
-sync-cursor:
-    @echo "Syncing all skills to {{skills_dest}}..."
-    @mkdir -p "{{skills_dest}}"
-    @cp -r {{skills_src}}/* "{{skills_dest}}/"
-    @echo "✓ Skills synced:"
-    @ls "{{skills_dest}}"
-
-# Sync a single skill to ~/.cursor/skills/ (usage: just sync-skill staff-test-engineer)
-sync-skill name:
-    @echo "Syncing '{{name}}'..."
-    @mkdir -p "{{skills_dest}}"
-    @cp -r "{{skills_src}}/{{name}}" "{{skills_dest}}/"
-    @echo "✓ Done — {{skills_dest}}/{{name}}"
-
-# Sync the orchestrator + team-standards (run after any standards change)
-sync-standards:
-    just sync-skill qa-team-orchestrator
-    @echo "✓ Standards synced"
-
 # ── Memory Management ─────────────────────────────────────────────────────────
 
 # Initialize full project memory: memory/ files (knowledge store) + Beads (task graph)
@@ -63,7 +60,7 @@ memory-init path=".":
     set -euo pipefail
     target="{{path}}/memory"
 
-    # ── Layer 2: knowledge store (memory/ files) ────────────────────────────
+    # ── Knowledge store (memory/ files) ────────────────────────────────────
     if [ -d "$target" ]; then
         echo "⚠ $target already exists — skipping knowledge store init"
     else
@@ -75,13 +72,13 @@ memory-init path=".":
         echo "✓ Knowledge store initialized at $target"
     fi
 
-    # ── Layer 1: task graph (Beads) ─────────────────────────────────────────
+    # ── Task graph (Beads) ──────────────────────────────────────────────────
     if command -v bd &>/dev/null; then
         if [ -d "{{path}}/.beads" ]; then
             echo "⚠ Beads already initialized at {{path}}/.beads — skipping"
         else
             (cd "{{path}}" && bd init)
-            echo "✓ Beads task graph initialized (use 'bd ready' to see unblocked tasks)"
+            echo "✓ Beads task graph initialized (use 'bd ready --json' to see unblocked tasks)"
         fi
     else
         echo ""
@@ -90,18 +87,19 @@ memory-init path=".":
         echo "  Then run: cd {{path}} && bd init"
     fi
 
-    # ── AGENTS.md hint ───────────────────────────────────────────────────────
+    # ── AGENTS.md ───────────────────────────────────────────────────────────
     agents_file="{{path}}/AGENTS.md"
     if [ ! -f "$agents_file" ]; then
         printf '%s\n' \
             "## Task Tracking (Beads)" \
             "" \
-            "Use bd for all task management:" \
-            "  bd ready                        start here every session" \
-            "  bd update <id> --claim          claim before starting work" \
-            "  bd update <id> --status done    mark complete when done" \
-            "  bd create \"Title\" -p N          create tasks (P0=critical, P3=low)" \
-            "  bd dep add <child> <parent>     link blocking dependencies" \
+            "Use bd for ALL task management — no markdown TODO lists, no external trackers." \
+            "  bd ready --json                        start here every session" \
+            "  bd update <id> --claim                 claim before starting work" \
+            "  bd update <id> --status done           mark complete when done" \
+            "  bd create \"Title\" -p N                 create tasks (P0=critical, P3=low)" \
+            "  bd dep add <new> <src> --type discovered-from   link all discovered work" \
+            "  Planning docs: history/YYYY-MM-DD-<desc>.md  (never in repo root)" \
             "" \
             "## Knowledge Store (memory/)" \
             "" \
@@ -132,10 +130,10 @@ memory-status path=".":
     grep "Current phase" "$target/CONTEXT.md" || echo "(not set)"
     echo ""
     echo "--- Handoffs (last updated per specialist) ---"
-    grep -E "^## (PM|Designer|Explorer|Staff|Architect|DevOps|Backend|API|Security|Performance|Mobile|Junior)" "$target/handoffs.md" || echo "(none)"
+    rg -e "^## (PM|Designer|Explorer|Staff|Architect|DevOps|Backend|API|Security|Performance|Mobile|Junior)" "$target/handoffs.md" || echo "(none)"
     echo ""
     echo "--- Open Questions ---"
-    grep -v "^#\|^|\s*#\|^$" "$target/open-questions.md" | grep "Open" || echo "(none open)"
+    rg "Open" "$target/open-questions.md" || echo "(none open)"
 
 # Show full memory context for a project (usage: just memory-show [path])
 memory-show path=".":
@@ -175,38 +173,54 @@ memory-reset path=".":
 
 # ── Task Management (Beads) ────────────────────────────────────────────────────
 
-# Show unblocked tasks — run this at the start of every session
+# Show unblocked tasks (--json for reliable output) — run before every session
 tasks:
-    @bd ready
+    @bd ready --json | jq -r '.[] | "\(.id)\t[P\(.priority)]\t\(.title)"' 2>/dev/null || bd ready
 
-# Create a task (usage: just task "Title" [priority])  priority: 0-3, default 1
+# Create a task (usage: just task "Title" [priority 0-3])
 task title priority="1":
     bd create "{{title}}" -p {{priority}}
 
-# Claim a task and mark it in_progress (usage: just claim <id>)
+# Claim a task (usage: just claim <id>)
 claim id:
     bd update {{id}} --claim
 
-# Mark a task done (usage: just done <id>)
+# Mark a task done, then show what's next (usage: just done <id>)
 done id:
     bd update {{id}} --status done
+    @echo "Next unblocked:"
+    @bd ready --json | jq -r '.[0:3] | .[] | "  \(.id)  \(.title)"' 2>/dev/null || bd ready
 
-# Show full task details (usage: just task-show <id>)
+# Show full task details as JSON (usage: just task-show <id>)
 task-show id:
-    bd show {{id}}
+    @bd show {{id}} --json | jq .
 
 # List all in-progress tasks
 in-progress:
-    @bd list --status in_progress
+    @bd list --status in_progress --json | jq -r '.[] | "\(.id)\t\(.title)"' 2>/dev/null || bd list --status in_progress
 
 # ── Status / Verify ───────────────────────────────────────────────────────────
 
-# Show sync status of CLAUDE.md symlink and Cursor skills
+# Show symlink status for both skills and CLAUDE.md
 status:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    echo "=== CLAUDE.md ==="
+    echo "=== Skills symlink ==="
+    if [ -L "{{skills_link}}" ]; then
+        target=$(readlink "{{skills_link}}")
+        if [ "$target" = "{{skills_src}}" ]; then
+            echo "✓ {{skills_link}} → $target"
+            echo "  ($(ls "{{skills_link}}" | wc -l | tr -d ' ') skills)"
+        else
+            echo "⚠ {{skills_link}} → $target  (expected {{skills_src}})"
+        fi
+    else
+        echo "✗ {{skills_link}} is not a symlink — run: just link-skills"
+    fi
+
+    echo ""
+    echo "=== CLAUDE.md symlink ==="
     if [ -L "{{claude_link}}" ]; then
         target=$(readlink "{{claude_link}}")
         if [ "$target" = "{{claude_src}}" ]; then
@@ -218,34 +232,36 @@ status:
         echo "✗ {{claude_link}} is not a symlink — run: just link-claude"
     fi
 
-    echo ""
-    echo "=== Global Cursor skills ({{skills_dest}}) ==="
-    if [ -d "{{skills_dest}}" ]; then
-        ls "{{skills_dest}}"
-    else
-        echo "✗ Directory not found — run: just sync-cursor"
-    fi
-
-    echo ""
-    echo "=== Local skills ({{skills_src}}) ==="
-    ls "{{skills_src}}"
-
-    echo ""
-    echo "=== Diff (local vs global) ==="
-    diff <(ls "{{skills_src}}") <(ls "{{skills_dest}}") && echo "✓ In sync" || echo "⚠ Out of sync — run: just sync-cursor"
-
-# Verify CLAUDE.md symlink is correct (exits non-zero if broken)
+# Verify both symlinks are correct (exits non-zero if either is broken)
 check:
     #!/usr/bin/env bash
     set -euo pipefail
+    errors=0
+
+    if [ ! -L "{{skills_link}}" ]; then
+        echo "✗ {{skills_link}} is not a symlink — run: just link-skills"
+        errors=$((errors+1))
+    else
+        target=$(readlink "{{skills_link}}")
+        if [ "$target" != "{{skills_src}}" ]; then
+            echo "✗ Skills wrong target: $target (expected {{skills_src}})"
+            errors=$((errors+1))
+        else
+            echo "✓ Skills symlink OK  ($(ls "{{skills_link}}" | wc -l | tr -d ' ') skills)"
+        fi
+    fi
+
     if [ ! -L "{{claude_link}}" ]; then
-        echo "✗ {{claude_link}} is not a symlink"
-        exit 1
+        echo "✗ {{claude_link}} is not a symlink — run: just link-claude"
+        errors=$((errors+1))
+    else
+        target=$(readlink "{{claude_link}}")
+        if [ "$target" != "{{claude_src}}" ]; then
+            echo "✗ CLAUDE.md wrong target: $target (expected {{claude_src}})"
+            errors=$((errors+1))
+        else
+            echo "✓ CLAUDE.md symlink OK"
+        fi
     fi
-    target=$(readlink "{{claude_link}}")
-    if [ "$target" != "{{claude_src}}" ]; then
-        echo "✗ Wrong target: $target (expected {{claude_src}})"
-        exit 1
-    fi
-    echo "✓ CLAUDE.md symlink OK"
-    echo "✓ Skills: $(ls {{skills_dest}} | wc -l | tr -d ' ') global, $(ls {{skills_src}} | wc -l | tr -d ' ') local"
+
+    exit $errors
