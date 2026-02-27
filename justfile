@@ -417,6 +417,18 @@ discord-setup token="" guild="":
     print(f"{'─'*60}\n")
     input("Press Enter once the bot is in your server to continue ...")
 
+    # List all guilds the bot is in — helps verify guild ID
+    print("Guilds bot is currently in:")
+    bot_guilds = api("GET", "/users/@me/guilds")
+    for g in bot_guilds:
+        marker = " ← MATCH" if g["id"] == guild else ""
+        print(f"  {g['id']}  {g['name']}{marker}")
+    if not any(g["id"] == guild for g in bot_guilds):
+        print(f"\n✗ Guild ID {guild} not found in bot's guild list above.")
+        print("  Either the bot wasn't fully added, or the Guild ID is wrong.")
+        sys.exit(1)
+    print()
+
     print(f"Fetching channels for guild {guild} ...")
     all_channels = {c["name"]: c["id"] for c in api("GET", f"/guilds/{guild}/channels") if c["type"] == 0}
 
