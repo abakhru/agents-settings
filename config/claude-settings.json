@@ -3,7 +3,10 @@
     "allow": [
       "Bash(*)",
       "WebFetch(*)",
-      "WebSearch(*)"
+      "WebSearch(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)"
     ]
   },
   "skipDangerousModePermissionPrompt": true,
