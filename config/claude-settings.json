@@ -1,11 +1,11 @@
 {
-  "effortLevel": "medium",
-  "skipDangerousModePermissionPrompt": true,
   "permissions": {
     "allow": [
       "Bash(*)",
       "WebFetch(*)",
       "WebSearch(*)"
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "effortLevel": "medium"
 }
