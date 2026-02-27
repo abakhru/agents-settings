@@ -5,15 +5,22 @@ Personal AI agent skills and rules for Cursor and Claude CLI.
 ## Quickstart
 
 ```bash
-# New machine — create all symlinks
+# 1. Clone and set up symlinks (once per machine)
+cd ~/src/amit-claude
 just setup
 
-# New project — initialize memory + task tracking
-cd /path/to/project
-just memory-init
+# 2. Add the ai alias to ~/.zshrc so targets work from any directory
+echo "alias ai='just -f ~/src/amit-claude/justfile'" >> ~/.zshrc
+source ~/.zshrc
 
-# Discord notifications (optional)
-cp config/discord.env.example config/discord.env  # fill in webhook URL
+# 3. New project — initialize memory + task tracking (run from the project dir)
+cd /path/to/project
+ai memory-init
+
+# 4. Discord notifications (optional)
+cp ~/src/amit-claude/config/discord.env.example ~/src/amit-claude/config/discord.env
+# fill in your webhook URL, then:
+ai notify "AI team online"
 ```
 
 ## Team
@@ -48,18 +55,20 @@ claude "As the devops engineer, write a GitHub Actions pipeline for this service
 
 ## justfile targets
 
+All targets are available from any directory via the `ai` alias.
+
 ```bash
-just setup              # first-time machine setup (symlinks)
-just status             # verify symlinks
-just memory-init        # init memory/ + bd for a project
-just memory-status      # show project memory status
-just tasks              # unblocked bd tasks
-just task "Title" [0-3] # create a task
-just claim <id>         # claim a task
-just done <id>          # mark complete
-just notify "msg"       # Discord notification
-just alert "msg"        # Discord alert
-just discord-status     # check Discord config
+ai setup              # first-time machine setup (symlinks)
+ai status             # verify symlinks
+ai memory-init        # init memory/ + bd in current directory
+ai memory-status      # show project memory status
+ai tasks              # unblocked bd tasks
+ai task "Title" [0-3] # create a task
+ai claim <id>         # claim a task
+ai done <id>          # mark complete
+ai notify "msg"       # Discord notification
+ai alert "msg"        # Discord alert
+ai discord-status     # check Discord config
 ```
 
 ## Structure

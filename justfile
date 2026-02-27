@@ -1,15 +1,23 @@
 # amit-claude — personal AI config & skills
 # Run `just` to see all targets
 
+# Colors (defined once, used via {{g}}/{{y}}/{{r}}/{{n}} substitution in all recipes)
+g := `printf '\033[32m'`
+y := `printf '\033[33m'`
+r := `printf '\033[31m'`
+n := `printf '\033[0m'`
+
 home           := env_var("HOME")
 skills_src     := justfile_directory() / ".cursor/skills"
 skills_link    := home / ".cursor/skills"
 rules_src      := justfile_directory() / ".cursor/rules"
 rules_link     := home / ".cursor/rules"
-claude_src     := justfile_directory() / "CLAUDE.md"
-claude_link    := home / ".claude/CLAUDE.md"
-templates_src  := justfile_directory() / ".cursor/skills/memory-manager/templates"
-discord_config := justfile_directory() / "config/discord.env"
+claude_src      := justfile_directory() / "CLAUDE.md"
+claude_link     := home / ".claude/CLAUDE.md"
+settings_src    := justfile_directory() / "config/claude-settings.json"
+settings_link   := home / ".claude/settings.json"
+templates_src   := justfile_directory() / ".cursor/skills/memory-manager/templates"
+discord_config  := justfile_directory() / "config/discord.env"
 
 # Show available commands
 default:
@@ -17,62 +25,37 @@ default:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-# First-time setup on a new machine: create all three symlinks (skills + rules + CLAUDE.md)
+# First-time setup: create all symlinks and add the 'ai' alias to ~/.zshrc
 setup:
-    just link-skills
-    just link-rules
-    just link-claude
-    @echo ""
-    @echo "Setup complete. Run 'just status' to verify."
-
-# Create ~/.cursor/skills → this repo's .cursor/skills/ (live symlink — no sync needed)
-link-skills:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -L "{{skills_link}}" ]; then
-        current=$(readlink "{{skills_link}}")
-        if [ "$current" = "{{skills_src}}" ]; then
-            echo "✓ Already linked: {{skills_link}} → {{skills_src}}"
-            exit 0
+
+    symlink() {
+        local src="$1" dst="$2"
+        if [ -L "$dst" ]; then
+            rm "$dst"                          # remove existing symlink before re-linking
+        elif [ -e "$dst" ]; then
+            mv "$dst" "${dst}.bak" && echo "  {{y}}backed up${n} ${dst}.bak"
         fi
-        echo "Updating existing symlink: $current → {{skills_src}}"
-        rm "{{skills_link}}"
-    elif [ -d "{{skills_link}}" ]; then
-        echo "Backing up existing directory → {{skills_link}}.bak"
-        mv "{{skills_link}}" "{{skills_link}}.bak"
-    fi
-    ln -s "{{skills_src}}" "{{skills_link}}"
-    echo "✓ Linked {{skills_link}} → {{skills_src}}"
+        ln -s "$src" "$dst"
+        echo "{{g}}✓{{n}} $dst → $src"
+    }
 
-# Create ~/.cursor/rules → this repo's .cursor/rules/ (live symlink — no sync needed)
-link-rules:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -L "{{rules_link}}" ]; then
-        current=$(readlink "{{rules_link}}")
-        if [ "$current" = "{{rules_src}}" ]; then
-            echo "✓ Already linked: {{rules_link}} → {{rules_src}}"
-            exit 0
-        fi
-        echo "Updating existing symlink: $current → {{rules_src}}"
-        rm "{{rules_link}}"
-    elif [ -d "{{rules_link}}" ]; then
-        echo "Backing up existing directory → {{rules_link}}.bak"
-        mv "{{rules_link}}" "{{rules_link}}.bak"
-    fi
-    ln -s "{{rules_src}}" "{{rules_link}}"
-    echo "✓ Linked {{rules_link}} → {{rules_src}}"
+    symlink "{{skills_src}}"   "{{skills_link}}"
+    symlink "{{rules_src}}"    "{{rules_link}}"
+    symlink "{{claude_src}}"   "{{claude_link}}"
+    symlink "{{settings_src}}" "{{settings_link}}"
 
-# Create ~/.claude/CLAUDE.md → this repo's CLAUDE.md (live symlink)
-link-claude:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -f "{{claude_link}}" ] && [ ! -L "{{claude_link}}" ]; then
-        echo "Backing up existing CLAUDE.md → {{claude_link}}.bak"
-        mv "{{claude_link}}" "{{claude_link}}.bak"
+    alias_line="alias ai='just -f {{justfile()}}'"
+    if grep -qF "$alias_line" "$HOME/.zshrc" 2>/dev/null; then
+        echo "{{g}}✓{{n}} 'ai' alias already in ~/.zshrc"
+    else
+        printf '\n# amit-claude\n%s\n' "$alias_line" >> "$HOME/.zshrc"
+        echo "{{g}}✓{{n}} Added 'ai' alias to ~/.zshrc — run: source ~/.zshrc"
     fi
-    ln -sf "{{claude_src}}" "{{claude_link}}"
-    echo "✓ Linked {{claude_link}} → {{claude_src}}"
+
+    echo ""
+    echo "{{g}}Done.{{n}} Run 'just status' to verify."
 
 # ── Memory Management ─────────────────────────────────────────────────────────
 
@@ -85,27 +68,27 @@ memory-init path=".":
 
     # ── Knowledge store (memory/ files) ────────────────────────────────────
     if [ -d "$target" ]; then
-        echo "⚠ $target already exists — skipping knowledge store init"
+        echo "{{y}}⚠{{n}} $target already exists — skipping knowledge store init"
     else
         mkdir -p "$target"
         cp "{{templates_src}}/CONTEXT.md"        "$target/CONTEXT.md"
         cp "{{templates_src}}/decisions.md"      "$target/decisions.md"
         cp "{{templates_src}}/handoffs.md"       "$target/handoffs.md"
         cp "{{templates_src}}/open-questions.md" "$target/open-questions.md"
-        echo "✓ Knowledge store initialized at $target"
+        echo "{{g}}✓{{n}} Knowledge store initialized at $target"
     fi
 
     # ── Task graph (Beads) ──────────────────────────────────────────────────
     if command -v bd &>/dev/null; then
         if [ -d "{{path}}/.beads" ]; then
-            echo "⚠ Beads already initialized at {{path}}/.beads — skipping"
+            echo "{{y}}⚠{{n}} Beads already initialized at {{path}}/.beads — skipping"
         else
             (cd "{{path}}" && bd init)
-            echo "✓ Beads task graph initialized (use 'bd ready --json' to see unblocked tasks)"
+            echo "{{g}}✓{{n}} Beads task graph initialized (use 'bd ready --json' to see unblocked tasks)"
         fi
     else
         echo ""
-        echo "⚠ 'bd' not found — skipping Beads init."
+        echo "{{y}}⚠{{n}} 'bd' not found — skipping Beads init."
         echo "  Install: bun install -g @beads/bd"
         echo "  Then run: cd {{path}} && bd init"
     fi
@@ -130,7 +113,7 @@ memory-init path=".":
             "After finishing: replace your section in memory/handoffs.md" \
             "and append decisions to memory/decisions.md" \
             > "$agents_file"
-        echo "✓ AGENTS.md created"
+        echo "{{g}}✓{{n}} AGENTS.md created"
     fi
 
     echo ""
@@ -143,7 +126,7 @@ memory-status path=".":
     set -euo pipefail
     target="{{path}}/memory"
     if [ ! -d "$target" ]; then
-        echo "✗ No memory/ directory found at {{path}} — run: just memory-init {{path}}"
+        echo "{{r}}✗{{n}} No memory/ directory found at {{path}} — run: just memory-init {{path}}"
         exit 1
     fi
     echo "=== Memory: $target ==="
@@ -164,7 +147,7 @@ memory-show path=".":
     set -euo pipefail
     target="{{path}}/memory"
     if [ ! -d "$target" ]; then
-        echo "✗ No memory/ at {{path}}"
+        echo "{{r}}✗{{n}} No memory/ at {{path}}"
         exit 1
     fi
     echo "════════════════════════════════"
@@ -190,7 +173,7 @@ memory-reset path=".":
     backup="${target}.bak.$(date +%Y%m%d-%H%M%S)"
     if [ -d "$target" ]; then
         mv "$target" "$backup"
-        echo "✓ Backed up $target → $backup"
+        echo "{{g}}✓{{n}} Backed up $target → $backup"
     fi
     just memory-init "{{path}}"
 
@@ -224,61 +207,25 @@ in-progress:
 
 # ── Status / Verify ───────────────────────────────────────────────────────────
 
-# Show symlink status for skills, rules, and CLAUDE.md
+# Show symlink status
 status:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    check_link() {
-        local label="$1" link="$2" expected="$3" fix="$4"
+    check() {
+        local label="$1" link="$2" expected="$3"
         if [ -L "$link" ]; then
-            target=$(readlink "$link")
-            if [ "$target" = "$expected" ]; then
-                count=""
-                [ -d "$link" ] && count="  ($(ls "$link" | wc -l | tr -d ' ') files)"
-                echo "✓ $link → $target$count"
-            else
-                echo "⚠ $link → $target  (expected $expected)"
-            fi
+            actual=$(readlink "$link")
+            count=""; [ -d "$link" ] && count="  ($(ls "$link" | wc -l | tr -d ' ') files)"
+            [ "$actual" = "$expected" ] && echo "{{g}}✓{{n}} $label: $link → $actual$count" \
+                                        || echo "{{y}}⚠{{n}} $label: wrong target $actual (expected $expected)"
         else
-            echo "✗ $link is not a symlink — run: just $fix"
+            echo "{{r}}✗{{n}} $label: $link is not a symlink — run: just setup"
         fi
     }
-
-    echo "=== Cursor skills ===" && check_link skills "{{skills_link}}" "{{skills_src}}" link-skills
-    echo ""
-    echo "=== Cursor rules ===" && check_link rules "{{rules_link}}" "{{rules_src}}" link-rules
-    echo ""
-    echo "=== CLAUDE.md ===" && check_link claude "{{claude_link}}" "{{claude_src}}" link-claude
-
-# Verify all three symlinks are correct (exits non-zero if any is broken)
-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    errors=0
-
-    check_link() {
-        local label="$1" link="$2" expected="$3" fix="$4"
-        if [ ! -L "$link" ]; then
-            echo "✗ $link is not a symlink — run: just $fix"
-            return 1
-        fi
-        target=$(readlink "$link")
-        if [ "$target" != "$expected" ]; then
-            echo "✗ $label wrong target: $target (expected $expected)"
-            return 1
-        fi
-        count=""
-        [ -d "$link" ] && count=" ($(ls "$link" | wc -l | tr -d ' ') files)"
-        echo "✓ $label symlink OK$count"
-        return 0
-    }
-
-    check_link "Skills" "{{skills_link}}" "{{skills_src}}" link-skills || errors=$((errors+1))
-    check_link "Rules"  "{{rules_link}}"  "{{rules_src}}"  link-rules  || errors=$((errors+1))
-    check_link "CLAUDE" "{{claude_link}}" "{{claude_src}}" link-claude || errors=$((errors+1))
-
-    exit $errors
+    check "Cursor skills"   "{{skills_link}}"   "{{skills_src}}"
+    check "Cursor rules"    "{{rules_link}}"    "{{rules_src}}"
+    check "CLAUDE.md"       "{{claude_link}}"   "{{claude_src}}"
+    check "Claude settings" "{{settings_link}}" "{{settings_src}}"
 
 # ── Discord Notifications ─────────────────────────────────────────────────────
 # Config: copy config/discord.env.example → config/discord.env and fill in webhooks.
@@ -291,12 +238,12 @@ notify msg:
     set -euo pipefail
     cfg="{{discord_config}}"
     if [ ! -f "$cfg" ]; then
-        echo "⚠ Discord not configured — copy config/discord.env.example → config/discord.env"
+        echo "{{y}}⚠{{n}} Discord not configured — copy config/discord.env.example → config/discord.env"
         exit 0
     fi
     source "$cfg"
     url="${DISCORD_WEBHOOK_UPDATES:-}"
-    if [ -z "$url" ]; then echo "⚠ DISCORD_WEBHOOK_UPDATES not set in $cfg"; exit 0; fi
+    if [ -z "$url" ]; then echo "{{y}}⚠{{n}} DISCORD_WEBHOOK_UPDATES not set in $cfg"; exit 0; fi
     username="${DISCORD_USERNAME:-amit-ai-team}"
     avatar="${DISCORD_AVATAR_URL:-}"
     payload=$(jq -n \
@@ -306,7 +253,7 @@ notify msg:
         '{content: $content, username: $username} + (if $avatar != "" then {avatar_url: $avatar} else {} end)')
     curl -s -o /dev/null -w "%{http_code}" -X POST "$url" \
         -H "Content-Type: application/json" \
-        -d "$payload" | grep -q "^2" && echo "✓ Discord notification sent" || echo "✗ Discord POST failed"
+        -d "$payload" | grep -q "^2" && echo "{{g}}✓{{n}} Discord notification sent" || echo "{{r}}✗{{n}} Discord POST failed"
 
 # Send an alert to the alerts channel (falls back to updates channel)
 # Usage: just alert "message"
@@ -315,12 +262,12 @@ alert msg:
     set -euo pipefail
     cfg="{{discord_config}}"
     if [ ! -f "$cfg" ]; then
-        echo "⚠ Discord not configured — copy config/discord.env.example → config/discord.env"
+        echo "{{y}}⚠{{n}} Discord not configured — copy config/discord.env.example → config/discord.env"
         exit 0
     fi
     source "$cfg"
     url="${DISCORD_WEBHOOK_ALERTS:-${DISCORD_WEBHOOK_UPDATES:-}}"
-    if [ -z "$url" ]; then echo "⚠ No alert webhook set in $cfg"; exit 0; fi
+    if [ -z "$url" ]; then echo "{{y}}⚠{{n}} No alert webhook set in $cfg"; exit 0; fi
     username="${DISCORD_USERNAME:-amit-ai-team}"
     avatar="${DISCORD_AVATAR_URL:-}"
     payload=$(jq -n \
@@ -330,7 +277,7 @@ alert msg:
         '{content: $content, username: $username} + (if $avatar != "" then {avatar_url: $avatar} else {} end)')
     curl -s -o /dev/null -w "%{http_code}" -X POST "$url" \
         -H "Content-Type: application/json" \
-        -d "$payload" | grep -q "^2" && echo "✓ Discord alert sent" || echo "✗ Discord POST failed"
+        -d "$payload" | grep -q "^2" && echo "{{g}}✓{{n}} Discord alert sent" || echo "{{r}}✗{{n}} Discord POST failed"
 
 # Post latest handoff summary from memory/handoffs.md to Discord
 # Usage: just notify-handoff [agent] [path]   agent defaults to last updated section, path to "."
@@ -339,7 +286,7 @@ notify-handoff agent="" path=".":
     set -euo pipefail
     handoffs="{{path}}/memory/handoffs.md"
     if [ ! -f "$handoffs" ]; then
-        echo "✗ No memory/handoffs.md at {{path}} — run: just memory-init {{path}}"
+        echo "{{r}}✗{{n}} No memory/handoffs.md at {{path}} — run: just memory-init {{path}}"
         exit 1
     fi
     if [ -n "{{agent}}" ]; then
@@ -350,7 +297,7 @@ notify-handoff agent="" path=".":
         msg=$(tail -20 "$handoffs")
     fi
     if [ -z "$msg" ]; then
-        echo "⚠ No handoff content found for agent '{{agent}}'"
+        echo "{{y}}⚠{{n}} No handoff content found for agent '{{agent}}'"
         exit 0
     fi
     just notify "$msg"
@@ -361,7 +308,7 @@ notify-done id:
     #!/usr/bin/env bash
     set -euo pipefail
     if ! command -v bd &>/dev/null; then
-        echo "⚠ bd not found"; exit 0
+        echo "{{y}}⚠{{n}} bd not found"; exit 0
     fi
     info=$(bd show {{id}} --json 2>/dev/null | jq -r '"Task done: [" + .id + "] " + .title + " (P" + (.priority|tostring) + ")"' 2>/dev/null || echo "Task {{id}} marked done")
     just notify "$info"
@@ -371,7 +318,7 @@ discord-status:
     #!/usr/bin/env bash
     cfg="{{discord_config}}"
     if [ ! -f "$cfg" ]; then
-        echo "✗ config/discord.env not found"
+        echo "{{r}}✗{{n}} config/discord.env not found"
         echo "  Setup: cp config/discord.env.example config/discord.env"
         echo "         then fill in your webhook URL(s)"
         exit 0
@@ -379,7 +326,7 @@ discord-status:
     source "$cfg"
     echo "=== Discord config ($cfg) ==="
     echo ""
-    [ -n "${DISCORD_WEBHOOK_UPDATES:-}" ] && echo "✓ DISCORD_WEBHOOK_UPDATES  set" || echo "✗ DISCORD_WEBHOOK_UPDATES  not set"
-    [ -n "${DISCORD_WEBHOOK_ALERTS:-}"  ] && echo "✓ DISCORD_WEBHOOK_ALERTS   set" || echo "  DISCORD_WEBHOOK_ALERTS   not set (falls back to UPDATES)"
-    [ -n "${DISCORD_USERNAME:-}"        ] && echo "✓ DISCORD_USERNAME         ${DISCORD_USERNAME}" || echo "  DISCORD_USERNAME         not set (default: amit-ai-team)"
-    [ -n "${DISCORD_AVATAR_URL:-}"      ] && echo "✓ DISCORD_AVATAR_URL       set" || echo "  DISCORD_AVATAR_URL       not set (Discord default)"
+    [ -n "${DISCORD_WEBHOOK_UPDATES:-}" ] && echo "{{g}}✓{{n}} DISCORD_WEBHOOK_UPDATES  set" || echo "{{r}}✗{{n}} DISCORD_WEBHOOK_UPDATES  not set"
+    [ -n "${DISCORD_WEBHOOK_ALERTS:-}"  ] && echo "{{g}}✓{{n}} DISCORD_WEBHOOK_ALERTS   set" || echo "  DISCORD_WEBHOOK_ALERTS   not set (falls back to UPDATES)"
+    [ -n "${DISCORD_USERNAME:-}"        ] && echo "{{g}}✓{{n}} DISCORD_USERNAME         ${DISCORD_USERNAME}" || echo "  DISCORD_USERNAME         not set (default: amit-ai-team)"
+    [ -n "${DISCORD_AVATAR_URL:-}"      ] && echo "{{g}}✓{{n}} DISCORD_AVATAR_URL       set" || echo "  DISCORD_AVATAR_URL       not set (Discord default)"
