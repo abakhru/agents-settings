@@ -326,45 +326,18 @@ notify-done id:
     info=$(bd show {{id}} --json 2>/dev/null | jq -r '"Task done: [" + .id + "] " + .title + " (P" + (.priority|tostring) + ")"' 2>/dev/null || echo "Task {{id}} marked done")
     just notify "$info"
 
-# Create webhooks for all channels via Discord API and write config/discord.env
-# Prerequisites: Discord bot with "Manage Webhooks" permission in your server
-#
 # Uses: scripts/discord_setup.py (httpx, loguru, rich)
-#
 # Usage:
 #   DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... just discord-setup
-#
-# How to get these:
-#   Bot token  → discord.com/developers/applications → your app → Bot → Reset Token
-#   Guild ID   → Discord: right-click your server → Copy Server ID (enable Developer Mode first)
 discord-setup:
     #!/usr/bin/env bash
     set -euo pipefail
-    python3 {{justfile_directory()}}/scripts/discord_setup.py
+    export DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
+    export DISCORD_GUILD_ID="${DISCORD_GUILD_ID:-}"
+    python3 {{justfile_directory()}}/scripts/discord_setup.py setup --token "${DISCORD_BOT_TOKEN}" --guild "${DISCORD_GUILD_ID}"
 
 # Show Discord config status
 discord-status:
     #!/usr/bin/env bash
-    cfg="{{discord_config}}"
-    if [ ! -f "$cfg" ]; then
-        echo "{{r}}✗{{n}} config/discord.env not found"
-        echo "  Setup: cp config/discord.env.example config/discord.env"
-        exit 0
-    fi
-    source "$cfg"
-    echo "=== Discord ($cfg) ==="
-    check() { [ -n "${!1:-}" ] && echo "{{g}}✓{{n}} $1" || echo "  $1  (not set)"; }
-    check DISCORD_WEBHOOK_UPDATES
-    check DISCORD_WEBHOOK_ALERTS
-    check DISCORD_WEBHOOK_PM
-    check DISCORD_WEBHOOK_DESIGN
-    check DISCORD_WEBHOOK_EXPLORATION
-    check DISCORD_WEBHOOK_ENGINEERING
-    check DISCORD_WEBHOOK_QA_STRATEGY
-    check DISCORD_WEBHOOK_QA_IMPLEMENTATION
-    check DISCORD_WEBHOOK_SECURITY
-    check DISCORD_WEBHOOK_PERFORMANCE
-    check DISCORD_WEBHOOK_DECISIONS
-    check DISCORD_WEBHOOK_CICD
-    echo ""
-    [ -n "${DISCORD_USERNAME:-}" ] && echo "{{g}}✓{{n}} DISCORD_USERNAME  ${DISCORD_USERNAME}" || echo "  DISCORD_USERNAME  not set (default: amit-ai-team)"
+    set -euo pipefail
+    python3 {{justfile_directory()}}/scripts/discord_setup.py status

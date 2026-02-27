@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import os, sys, json
 from pathlib import Path
+import argparse
 import httpx
 from loguru import logger
 from rich.logging import RichHandler
-from rich.console import Console
-
-# Initialize rich console
-console = Console()
+from rich.table import Table
+from rich import print as rich_print
 
 # Configure loguru with rich handler
 logger.remove()  # Remove default handler
@@ -17,25 +16,27 @@ logger.add(
     level="INFO"
 )
 
-logger.debug("Starting Discord setup script")
-
-token = os.environ.get("DISCORD_BOT_TOKEN", "")
-guild = os.environ.get("DISCORD_GUILD_ID", "")
-cfg = Path("config/discord.env")
-logger.debug(f"Config loaded: token_present={bool(token)}, guild={guild}, config_file={cfg}")
-
-if not token or not guild:
-    console.print("[bold red]✗ Missing credentials[/bold red]")
-    console.print("\n[bold yellow]Usage:[/bold yellow]")
-    console.print("  [cyan]DISCORD_BOT_TOKEN=xxx DISCORD_GUILD_ID=yyy just discord-setup[/cyan]")
-    console.print("  [cyan]just discord-setup token=xxx guild=yyy[/cyan]")
-    console.print("[bold]Bot token[/bold] → discord.com/developers/applications → your app → Bot → Reset Token")
-    console.print("[bold]Guild ID[/bold]  → Discord: right-click server → Copy Server ID (Developer Mode)")
-    sys.exit(1)
-
+cfg_path = Path("config/discord.env")
 API  = "https://discord.com/api/v10"
-HDR  = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
-logger.debug(f"Discord API base: {API}")
+HDR: dict[str, str] = {}
+
+
+def get_credentials(token_arg = str, guild_arg = str) -> tuple[str, str]:
+    token = os.environ.get("DISCORD_BOT_TOKEN") or token_arg
+    guild = os.environ.get("DISCORD_GUILD_ID") or guild_arg
+    logger.debug(f"Credentials from env/args: token_present={bool(token)}, guild={guild}")
+    if not token or not guild:
+        logger.error("✗ Missing credentials")
+        logger.info("\nUsage:")
+        logger.info("  DISCORD_BOT_TOKEN=xxx DISCORD_GUILD_ID=yyy just discord-setup")
+        logger.info("Bot token → discord.com/developers/applications → your app → Bot → Reset Token")
+        logger.info("Guild ID  → Discord: right-click server → Copy Server ID (Developer Mode)")
+        sys.exit(1)
+    logger.debug(f"Config loaded: token_present={bool(token)}, guild={guild}, config_file={cfg_path}")
+    HDR.update({"Authorization": f"Bot {token}", "Content-Type": "application/json"})
+    return token, guild
+
+
 
 CHANNELS = {
     "updates":           "DISCORD_WEBHOOK_UPDATES",
@@ -90,105 +91,130 @@ def api(method, path, body=None):
         logger.error(f"Raw response: {response.text[:500]}")
         sys.exit(1)
 
-# Validate token and get bot's client ID
-logger.info("Validating token and retrieving bot identity")
-me = api("GET", "/users/@me")
-client_id = me["id"]
-console.print(f"[bold green]✓ Bot authenticated:[/bold green] [cyan]{me['username']}[/cyan] (id: [yellow]{client_id}[/yellow])")
 
-# Print invite URL — must be opened in browser to add bot to the server
-# logger.debug("Generating bot invitation URL")
-# perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS = 536871936
-# logger.debug(f"Permission bits: {perms}")
-# invite = f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot&permissions={perms}"
-# console.print(f"\n[bold magenta]{'─'*60}[/bold magenta]")
-# console.print("[bold cyan]STEP:[/bold cyan] [yellow]Open this URL in your browser to add the bot to your server:[/yellow]")
-# console.print(f"  [blue]{invite}[/blue]")
-# console.print(f"[bold magenta]{'─'*60}[/bold magenta]\n")
-# input("Press Enter once the bot is in your server to continue ...")
+def setup(token_arg: str | None = None, guild_arg: str | None = None) -> None:
+    # initialize credentials and headers
+    token, guild = get_credentials(token_arg, guild_arg)
 
-# List all guilds the bot is in — helps verify guild ID
-logger.info("Fetching guilds bot is currently in")
-bot_guilds = api("GET", "/users/@me/guilds")
-logger.info(f"Found {len(bot_guilds)} guild(s)")
+    logger.info("Validating token and retrieving bot identity")
+    me = api("GET", "/users/@me")
+    client_id = me["id"]
+    logger.info(f"✓ Bot authenticated: {me['username']} (id: {client_id})")
 
-for g in bot_guilds:
-    marker = " [bold green]← MATCH[/bold green]" if g["id"] == guild else ""
-    console.print(f"  [cyan]{g['id']}[/cyan]  [yellow]{g['name']}[/yellow]{marker}")
-if not any(g["id"] == guild for g in bot_guilds):
-    console.print(f"[bold red]✗ Guild ID {guild} not found in bot's guild list above.[/bold red]")
-    console.print("[red]Either the bot wasn't fully added, or the Guild ID is wrong.[/red]")
-    sys.exit(1)
-logger.debug(f"Guild ID {guild} verified")
+    # List guilds to verify
+    logger.info("Fetching guilds bot is currently in")
+    bot_guilds = api("GET", "/users/@me/guilds")
+    logger.info(f"Found {len(bot_guilds)} guild(s)")
 
-logger.info(f"Fetching channels for guild {guild}")
-channels_data = api("GET", f"/guilds/{guild}/channels")
-logger.debug(f"Retrieved {len(channels_data)} channel(s)")
-all_channels = {c["name"]: c["id"] for c in channels_data if c["type"] == 0}
-logger.debug(f"Filtered to {len(all_channels)} text channel(s)")
+    for g in bot_guilds:
+        marker = " ← MATCH" if g["id"] == guild else ""
+        logger.info(f"  {g['id']}  {g['name']}{marker}")
+    if not any(g["id"] == guild for g in bot_guilds):
+        logger.error(f"✗ Guild ID {guild} not found in bot's guild list above.")
+        logger.error("Either the bot wasn't fully added, or the Guild ID is wrong.")
+        sys.exit(1)
+    logger.debug(f"Guild ID {guild} verified")
 
-results = {}
-for name, var in CHANNELS.items():
-    if name not in all_channels:
-        console.print(f"  [yellow]⚠[/yellow]  [cyan]#{name}[/cyan] [red]not found[/red] — skipping [dim]{var}[/dim]")
-        results[var] = ""
-        continue
-    
-    channel_id = all_channels[name]
-    logger.debug(f"Processing webhook for #{name}")
-    
-    # Check if webhook already exists
-    existing_webhooks = api("GET", f"/channels/{channel_id}/webhooks")
-    logger.debug(f"Found {len(existing_webhooks)} existing webhook(s) in #{name}")
-    
-    existing_wh = None
-    for wh in existing_webhooks:
-        if wh.get("name") == "Bot":
-            existing_wh = wh
-            logger.debug(f"Found existing webhook for #{name}")
-            break
-    
-    if existing_wh:
-        url = f"https://discord.com/api/webhooks/{existing_wh['id']}/{existing_wh['token']}"
-        results[var] = url
-        console.print(f"  [bold cyan]↻[/bold cyan]  [cyan]#{name}[/cyan] [dim](existing webhook)[/dim]")
+    logger.info(f"Fetching channels for guild {guild}")
+    channels_data = api("GET", f"/guilds/{guild}/channels")
+    logger.debug(f"Retrieved {len(channels_data)} channel(s)")
+    all_channels = {c["name"]: c["id"] for c in channels_data if c["type"] == 0}
+    logger.debug(f"Filtered to {len(all_channels)} text channel(s)")
+
+    results: dict[str, str] = {}
+    for name, var in CHANNELS.items():
+        if name not in all_channels:
+            logger.warning(f"  ⚠  #{name} not found — skipping {var}")
+            results[var] = ""
+            continue
+
+        channel_id = all_channels[name]
+        logger.debug(f"Processing webhook for #{name}")
+
+        # Check if webhook already exists
+        existing_webhooks = api("GET", f"/channels/{channel_id}/webhooks")
+        logger.debug(f"Found {len(existing_webhooks)} existing webhook(s) in #{name}")
+
+        existing_wh = None
+        for wh in existing_webhooks:
+            if wh.get("name") == "Bot":
+                existing_wh = wh
+                logger.debug(f"Found existing webhook for #{name}")
+                break
+
+        if existing_wh:
+            url = f"https://discord.com/api/webhooks/{existing_wh['id']}/{existing_wh['token']}"
+            results[var] = url
+            logger.info(f"  ↻  #{name} (existing webhook)")
+        else:
+            logger.debug(f"Creating new webhook for #{name}")
+            wh = api("POST", f"/channels/{channel_id}/webhooks", {"name": "Bot"})
+            url = f"https://discord.com/api/webhooks/{wh['id']}/{wh['token']}"
+            results[var] = url
+            logger.info(f"  ✓  #{name} (new webhook)")
+
+    lines = [
+        "# Discord Webhook Configuration — generated by just discord-setup",
+        "# DO NOT COMMIT — this file is gitignored.",
+        "",
+        'DISCORD_USERNAME="Bot"',
+        "DISCORD_AVATAR_URL=",
+        "",
+    ]
+    # append entries grouped by category comments
+    lines.append("# Webhooks")
+    for channel_var in CHANNELS.values():
+        lines.append(f"{channel_var}={results.get(channel_var, '')}")
+    lines.append("")
+    lines.append("# Process")
+    for channel_var in ("DISCORD_WEBHOOK_DECISIONS","DISCORD_WEBHOOK_CICD"):
+        lines.append(f"{channel_var}={results.get(channel_var, '')}")
+    # note: process channels are included above via channels.values() as well, duplicates ok
+
+    logger.info(f"Writing configuration to {cfg_path}")
+    cfg_path.write_text("\n".join(lines) + "\n")
+
+    # Count new vs existing webhooks
+    total_webhooks = sum(1 for v in results.values() if v)
+    logger.info(f"\n✓ Configuration saved {cfg_path}")
+    logger.info(f"Summary: {total_webhooks} webhook(s) configured")
+    logger.info("Next step: Run 'just discord-status' to verify")
+
+
+def status() -> None:
+    if not cfg_path.exists():
+        logger.warning(f" Discord not configured — {cfg_path} missing")
+        sys.exit(0)
+    env = {}
+    for line in cfg_path.read_text().splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            env[k.strip()] = v.strip().strip('"')
+    table = Table(title=f"Discord config ({cfg_path})")
+    table.add_column("Variable")
+    table.add_column("Value", overflow="fold")
+    for key in list(CHANNELS.values()) + ["DISCORD_USERNAME"]:
+        val = env.get(key, "(not set)")
+        table.add_row(key, val)
+    rich_print(table)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Discord webhook helper")
+    sub = parser.add_subparsers(dest="cmd")
+    sp = sub.add_parser("setup")
+    sp.add_argument("--token", help="Discord bot token")
+    sp.add_argument("--guild", help="Guild ID")
+    sub.add_parser("status")
+    args = parser.parse_args()
+    if args.cmd == "setup":
+        setup(token_arg=getattr(args, "token", None), guild_arg=getattr(args, "guild", None))
+    elif args.cmd == "status":
+        status()
     else:
-        logger.debug(f"Creating new webhook for #{name}")
-        wh = api("POST", f"/channels/{channel_id}/webhooks", {"name": "Bot"})
-        url = f"https://discord.com/api/webhooks/{wh['id']}/{wh['token']}"
-        results[var] = url
-        console.print(f"  [bold green]✓[/bold green]  [cyan]#{name}[/cyan] [dim](new webhook)[/dim]")
+        parser.print_help()
 
-lines = [
-    "# Discord Webhook Configuration — generated by just discord-setup",
-    "# DO NOT COMMIT — this file is gitignored.",
-    "",
-    'DISCORD_USERNAME="Bot"',
-    "DISCORD_AVATAR_URL=",
-    "",
-    "# Activity",
-    f"DISCORD_WEBHOOK_UPDATES={results['DISCORD_WEBHOOK_UPDATES']}",
-    f"DISCORD_WEBHOOK_ALERTS={results['DISCORD_WEBHOOK_ALERTS']}",
-    "",
-    "# Specialist",
-    f"DISCORD_WEBHOOK_PM={results['DISCORD_WEBHOOK_PM']}",
-    f"DISCORD_WEBHOOK_DESIGN={results['DISCORD_WEBHOOK_DESIGN']}",
-    f"DISCORD_WEBHOOK_EXPLORATION={results['DISCORD_WEBHOOK_EXPLORATION']}",
-    f"DISCORD_WEBHOOK_ENGINEERING={results['DISCORD_WEBHOOK_ENGINEERING']}",
-    f"DISCORD_WEBHOOK_QA_STRATEGY={results['DISCORD_WEBHOOK_QA_STRATEGY']}",
-    f"DISCORD_WEBHOOK_QA_IMPLEMENTATION={results['DISCORD_WEBHOOK_QA_IMPLEMENTATION']}",
-    f"DISCORD_WEBHOOK_SECURITY={results['DISCORD_WEBHOOK_SECURITY']}",
-    f"DISCORD_WEBHOOK_PERFORMANCE={results['DISCORD_WEBHOOK_PERFORMANCE']}",
-    "",
-    "# Process",
-    f"DISCORD_WEBHOOK_DECISIONS={results['DISCORD_WEBHOOK_DECISIONS']}",
-    f"DISCORD_WEBHOOK_CICD={results['DISCORD_WEBHOOK_CICD']}",
-]
-logger.info(f"Writing configuration to {cfg}")
-cfg.write_text("\n".join(lines) + "\n")
 
-# Count new vs existing webhooks
-total_webhooks = sum(1 for v in results.values() if v)
-console.print(f"\n[bold green]✓ Configuration saved[/bold green] [cyan]{cfg}[/cyan]")
-console.print(f"[bold cyan]Summary:[/bold cyan] [green]{total_webhooks}[/green] webhook(s) configured")
-console.print("[bold yellow]Next step:[/bold yellow] [cyan]Run 'just discord-status' to verify[/cyan]")
+if __name__ == "__main__":
+    main()
+

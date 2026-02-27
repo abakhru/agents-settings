@@ -7,3 +7,4 @@ config/discord.env
 # macOS
 .DS_Store
 uv.lock
+.vscode/
