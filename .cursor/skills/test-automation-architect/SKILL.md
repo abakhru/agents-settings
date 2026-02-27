@@ -74,27 +74,9 @@ On-demand   → stress / soak tests
 - Publish JUnit XML (or Allure) results to CI for trend tracking.
 - Slack / notification on main branch failures; PR failures visible in PR checks.
 
-### UI Test Recording (mandatory for all E2E and component tests)
+### UI Test Recording
 
-Every Playwright config must include:
-
-```typescript
-use: {
-  video:      'retain-on-failure',   // full session recording; kept only on failure
-  screenshot: 'only-on-failure',     // frame at assertion failure point
-  trace:      'retain-on-failure',   // DOM + network + console trace on failure
-},
-reporter: [
-  ['html'],
-  ['json',  { outputFile: 'test-results/results.json' }],
-  ['junit', { outputFile: 'test-results/junit.xml' }],
-],
-outputDir: 'test-results/',
-```
-
-On any failure the artifacts are available at `test-results/<test-name>/video.webm`, `screenshot.png`, and `trace.zip`. These artifacts feed the junior engineer's **UI Fix Suggestion** workflow — see `ui-testing.mdc` rule and `junior-test-engineer` skill.
-
-**Never use `video: 'on'`** — record only on failure to avoid CI storage bloat.
+All Playwright configs must set `video/screenshot/trace: 'retain-on-failure'` and output to `test-results/`. Full config and the UI Fix Suggestion workflow: see `ui-testing.mdc`. Never use `video: 'on'`.
 
 ## Evaluating New Tools
 

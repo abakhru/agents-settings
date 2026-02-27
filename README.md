@@ -25,22 +25,7 @@ ai notify "AI team online"
 
 ## Team
 
-| Skill | When to use |
-|---|---|
-| `qa-team-orchestrator` | Start here for any broad request |
-| `product-manager` | Feature definition, PRD, acceptance criteria |
-| `ui-ux-designer` | User flows, component specs, design tokens, a11y |
-| `exploratory-test-engineer` | Unknown app/feature — map it first |
-| `staff-test-engineer` | Test strategy, risk, quality gates |
-| `test-automation-architect` | Framework setup, CI integration |
-| `devops-engineer` | CI/CD pipelines, Docker/K8s, infra |
-| `backend-python` | FastAPI, SQLAlchemy, Pydantic, uv |
-| `junior-test-engineer` | Test implementation, bug reports |
-| `api-contract-test-engineer` | REST/GraphQL, Pact contracts |
-| `security-test-engineer` | OWASP, auth/authz, scan triage |
-| `performance-stress-test-engineer` | Load, stress, k6 |
-| `mobile-test-engineer` | iOS/Android, Appium |
-| `memory-manager` | Cross-session knowledge and handoffs |
+14 specialists — see `CLAUDE.md` for the full list and activation triggers. Start with `qa-team-orchestrator` for any broad request.
 
 ## Usage
 

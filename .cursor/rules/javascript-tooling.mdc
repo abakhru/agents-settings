@@ -48,29 +48,9 @@ bun run src/index.ts
 | `npx create-next-app` | `bun x create-next-app` |
 | `npm uninstall lodash` | `bun remove lodash` |
 
-### Docker — cache bun's install cache across builds
+### Docker
 
-```dockerfile
-FROM oven/bun:1-alpine AS deps
-WORKDIR /app
-COPY package.json bun.lock ./
-RUN --mount=type=cache,target=/root/.bun/install/cache \
-    bun install --frozen-lockfile
-
-FROM oven/bun:1-alpine AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN bun run build
-
-FROM oven/bun:1-alpine AS runtime
-WORKDIR /app
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
-USER nonroot
-CMD ["bun", "run", "start"]
-```
+Use `--mount=type=cache,target=/root/.bun/install/cache` on the `bun install` layer. See `docker.mdc` for full multi-stage Dockerfile patterns.
 
 ---
 
@@ -113,41 +93,9 @@ Existing `app/`, `pages/`, and `next.config.js` files work as-is — no code cha
 }
 ```
 
-### justfile targets for JS/TS projects
+### justfile
 
-```justfile
-# Install dependencies
-install:
-    bun install
-
-# Start development server
-dev:
-    vinext dev
-
-# Production build
-build:
-    vinext build
-
-# Deploy to Cloudflare Workers
-deploy:
-    vinext deploy
-
-# Type check
-typecheck:
-    bun run tsc --noEmit
-
-# Lint
-lint:
-    bun run eslint .
-
-# Run tests
-test:
-    bun test
-
-# Full CI check
-ci:
-    just typecheck && just lint && just test && just build
-```
+Standard targets: `install` (`bun install`), `dev` (`vinext dev`), `build` (`vinext build`), `deploy` (`vinext deploy`), `test` (`bun test`), `ci` (`just typecheck lint test build`). See `task-runner.mdc` for the full justfile pattern.
 
 ### Migration from Next.js
 

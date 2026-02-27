@@ -6,31 +6,7 @@ Shared reference for all test engineering specialists. Prefer project-specific t
 
 ## Coding Principles
 
-These apply to all code and tests produced by any specialist.
-
-| Principle | Rule |
-|---|---|
-| **Minimum code** | Write the simplest implementation that satisfies the requirement. No speculative abstractions. |
-| **DRY** | Every piece of logic lives in exactly one place. Extract duplicated code immediately. |
-| **Modular test design** | Group related tests in classes. Extract shared setup into base classes or mixins. Use inheritance when specialist behaviour extends a common base. |
-| **Parameterized Python tests** | Use the [`parameterized`](https://pypi.org/project/parameterized/) library for data-driven test cases. Never duplicate test methods for different inputs. |
-| **Performance testing** | Always use **k6**. No Locust or Gatling unless the project already uses them. |
-| **Atomic & independent tests** | Every test runs in any order, in isolation, and produces the same result. No test depends on state left by another. |
-| **UI test recording** | All E2E and component tests must use `video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`, and `trace: 'retain-on-failure'` in Playwright config. On failure, produce a UI Fix Suggestion before filing a bug or disabling the test. |
-| **Always clean up** | `tearDown` (or fixture finalizer) undoes every side effect: created data, open connections, written files, changed shared state. |
-| **Python linting** | **ruff** — line length 120, double quotes. Config in `pyproject.toml`. Replaces flake8, black, and isort. |
-| **Python type checking** | **ty** (Astral). All new code must be fully annotated. No bare `Any` without a comment. |
-| **Task runner** | **just** for every project. `just` with no args prints help (`default: @just --list`). CI calls `just <target>`, not raw commands. |
-| **Docker caching** | Always use `--mount=type=cache` for uv, bun, apt, and any other package-install layer. Python images use uv; JS images use bun. |
-| **uv** | Use `uv` for all new Python projects. Never use bare `pip`, `pip-tools`, or `poetry`. |
-| **bun** | Use `bun` for all JavaScript/TypeScript projects. Never use `npm`, `yarn`, or `pnpm` for new projects. |
-| **vinext** | Use `vinext` (Cloudflare's Next.js on Vite) for all new web UI and full-stack projects. `bun add vinext`; commands: `vinext dev / build / deploy`. |
-| **beads** | Use `bd` for ALL task tracking — no GitHub Issues, Jira, or markdown TODO lists. `bd ready --json` at session start. Always `--json` for programmatic output. Link discovered work with `--type discovered-from`. Store AI planning docs in `history/` (never repo root). |
-| **mise.toml** | Pin all tool versions (Python, Node, just, etc.) in `mise.toml` at repo root. Commit to git. CI calls `mise install` first. |
-| **Integration tests** | Use real services (Docker Compose, testcontainers). Mocking only in unit tests. |
-| **Dependency scanning** | **osv-scanner** — scans `uv.lock`, `package-lock.json`, etc. Runs every PR; CRITICAL blocks merge. |
-| **Image scanning** | **trivy** — scans Docker images before push. Fail CI on HIGH or CRITICAL. Document accepted findings in `.trivyignore` with expiry. |
-| **Search** | Always use **rg** (ripgrep) instead of `grep`. Faster, respects `.gitignore`, better defaults. Never use `grep` in scripts or docs. |
+See `coding-principles.mdc` for full rules with examples. Key: minimum code, DRY, atomic & independent tests, clean tearDown, real services in integration tests, `rg` not `grep`, short git commits with no AI footers.
 
 ---
 

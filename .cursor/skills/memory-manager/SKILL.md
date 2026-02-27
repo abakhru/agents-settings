@@ -30,30 +30,7 @@ just memory-init --no-bd  # memory/ files only, skip Beads
 
 ## Layer 1 — Task Tracking with Beads (`bd`)
 
-Use Beads for all work items: features, bugs, sub-tasks, spikes. Its dependency graph tells the team exactly what's unblocked and ready to implement.
-
-### Essential commands
-
-```bash
-bd ready --json                         # Unblocked tasks — always use --json for programmatic use
-bd create "Title" -p 1                  # Create a task (P0=critical … P3=low)
-bd update <id> --claim                  # Atomically claim (sets assignee + in_progress)
-bd dep add <child> <parent>             # Block child until parent done
-bd dep add <found> <source> --type discovered-from  # Link work discovered during another task
-bd show <id> --json                     # Full task details + audit trail
-bd list --status in_progress --json     # What's in flight
-bd update <id> --status done            # Mark complete
-```
-
-**Always use `--json` when parsing output programmatically.** Plain-text format is for humans only.
-
-### Hierarchy
-
-```
-bd-a3f8          ← Epic (e.g., "User authentication")
-bd-a3f8.1        ← Task (e.g., "Implement JWT login endpoint")
-bd-a3f8.1.1      ← Sub-task (e.g., "Write unit tests for token validation")
-```
+Use Beads for all work items. Full command reference and rules: see `beads.mdc`.
 
 ### Who creates tasks
 
@@ -65,27 +42,7 @@ bd-a3f8.1.1      ← Sub-task (e.g., "Write unit tests for token validation")
 | `exploratory-test-engineer` | Discovery tasks; creates specialist work items from findings |
 | All others | Sub-tasks under their area; bug tasks from findings |
 
-### Session workflow with Beads
-
-```bash
-# Session start — never skip this
-bd ready --json            # see what's unblocked; --json for reliable parsing
-bd update <id> --claim     # claim before touching any code
-
-# Session end
-bd update <id> --status done                              # mark complete
-bd create "Discovered: ..." -p N                          # any follow-up work found
-bd dep add <new-id> <done-id> --type discovered-from     # always link discovered work
-```
-
-### Storing planning output
-
-AI-generated docs (PRD drafts, session notes, exploration output, spike results) go in `history/`:
-```
-history/YYYY-MM-DD-<description>.md
-```
-
-Never drop planning docs in the repo root. Never create markdown TODO lists — everything trackable goes in `bd`.
+Planning output (PRD drafts, session notes, spike results) → `history/YYYY-MM-DD-<description>.md`. Never in repo root, never in markdown TODO lists.
 
 ### AGENTS.md (add to project root)
 
