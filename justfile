@@ -60,8 +60,8 @@ setup:
 # ── Memory Management ─────────────────────────────────────────────────────────
 
 # Initialize full project memory: memory/ files (knowledge store) + Beads (task graph)
-# Usage: just memory-init [path]   — defaults to current directory
-memory-init path=".":
+# Usage: ai memory-init [path]   — defaults to the directory where ai was invoked
+memory-init path=invocation_directory():
     #!/usr/bin/env bash
     set -euo pipefail
     target="{{path}}/memory"
@@ -121,7 +121,7 @@ memory-init path=".":
     echo "      Then run: bd create 'First task' -p 1"
 
 # Show memory status for a project (usage: just memory-status [path])
-memory-status path=".":
+memory-status path=invocation_directory():
     #!/usr/bin/env bash
     set -euo pipefail
     target="{{path}}/memory"
@@ -142,7 +142,7 @@ memory-status path=".":
     rg "Open" "$target/open-questions.md" || echo "(none open)"
 
 # Show full memory context for a project (usage: just memory-show [path])
-memory-show path=".":
+memory-show path=invocation_directory():
     #!/usr/bin/env bash
     set -euo pipefail
     target="{{path}}/memory"
@@ -166,7 +166,7 @@ memory-show path=".":
     cat "$target/open-questions.md"
 
 # Reset memory/ for a project — backs up first (usage: just memory-reset [path])
-memory-reset path=".":
+memory-reset path=invocation_directory():
     #!/usr/bin/env bash
     set -euo pipefail
     target="{{path}}/memory"
@@ -281,7 +281,7 @@ alert msg:
 
 # Post latest handoff summary from memory/handoffs.md to Discord
 # Usage: just notify-handoff [agent] [path]   agent defaults to last updated section, path to "."
-notify-handoff agent="" path=".":
+notify-handoff agent="" path=invocation_directory():
     #!/usr/bin/env bash
     set -euo pipefail
     handoffs="{{path}}/memory/handoffs.md"
