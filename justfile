@@ -329,145 +329,18 @@ notify-done id:
 # Create webhooks for all channels via Discord API and write config/discord.env
 # Prerequisites: Discord bot with "Manage Webhooks" permission in your server
 #
+# Uses: scripts/discord_setup.py (httpx, loguru, rich)
+#
 # Usage:
 #   DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... just discord-setup
-#   just discord-setup token=Bot_TOKEN guild=GUILD_ID
 #
 # How to get these:
 #   Bot token  → discord.com/developers/applications → your app → Bot → Reset Token
 #   Guild ID   → Discord: right-click your server → Copy Server ID (enable Developer Mode first)
-discord-setup token="" guild="":
-    #!/usr/bin/env python3
-    import os, sys
-    from pathlib import Path
-    try:
-        import httpx
-    except ImportError:
-        print("✗ httpx not installed — run: pip install httpx  (or: uv add httpx)")
-        sys.exit(1)
-
-    token = "{{token}}" or os.environ.get("DISCORD_BOT_TOKEN", "")
-    guild = "{{guild}}" or os.environ.get("DISCORD_GUILD_ID", "")
-    cfg   = Path("{{discord_config}}")
-
-    if not token or not guild:
-        print("✗ Missing credentials.\n")
-        print("Usage:")
-        print("  DISCORD_BOT_TOKEN=xxx DISCORD_GUILD_ID=yyy just discord-setup")
-        print("  just discord-setup token=xxx guild=yyy\n")
-        print("Bot token → discord.com/developers/applications → your app → Bot → Reset Token")
-        print("Guild ID  → Discord: right-click server → Copy Server ID (Developer Mode)")
-        sys.exit(1)
-
-    API = "https://discord.com/api/v10"
-    HDR = {"Authorization": f"Bot {token}"}
-
-    CHANNELS = {
-        "updates":           "DISCORD_WEBHOOK_UPDATES",
-        "alerts":            "DISCORD_WEBHOOK_ALERTS",
-        "pm":                "DISCORD_WEBHOOK_PM",
-        "design":            "DISCORD_WEBHOOK_DESIGN",
-        "exploration":       "DISCORD_WEBHOOK_EXPLORATION",
-        "engineering":       "DISCORD_WEBHOOK_ENGINEERING",
-        "qa-strategy":       "DISCORD_WEBHOOK_QA_STRATEGY",
-        "qa-implementation": "DISCORD_WEBHOOK_QA_IMPLEMENTATION",
-        "security":          "DISCORD_WEBHOOK_SECURITY",
-        "performance":       "DISCORD_WEBHOOK_PERFORMANCE",
-        "decisions":         "DISCORD_WEBHOOK_DECISIONS",
-        "cicd":              "DISCORD_WEBHOOK_CICD",
-    }
-
-    def api(client, method, path, **kwargs):
-        r = client.request(method, f"{API}{path}", **kwargs)
-        if not r.is_success:
-            try:
-                detail = r.json()
-                code = detail.get("code", "")
-                msg  = detail.get("message", str(detail))
-            except Exception:
-                code, msg = "", r.text[:300]
-            print(f"✗ HTTP {r.status_code} (Discord code: {code}) — {msg}")
-            if r.status_code == 401:
-                print("\n→ Token is invalid. Regenerate at discord.com/developers → Bot → Reset Token")
-            elif r.status_code == 403:
-                print("\n→ Bot is missing permissions or not in this server.")
-                print("  Open the invite URL above, re-authorize, and ensure Manage Webhooks is checked.")
-            elif r.status_code == 404:
-                print("\n→ Wrong Guild ID. Right-click your server → Copy Server ID.")
-            sys.exit(1)
-        return r.json()
-
-    with httpx.Client(headers=HDR) as client:
-        # Validate token
-        me = api(client, "GET", "/users/@me")
-        client_id = me["id"]
-        print(f"Bot: {me['username']} (id: {client_id})")
-
-        # Print invite URL
-        perms = (1 << 10) | (1 << 29)  # VIEW_CHANNEL + MANAGE_WEBHOOKS
-        invite = f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot&permissions={perms}"
-        print(f"\n{'─'*60}")
-        print("STEP: Open this URL to add the bot to your server (if not already):")
-        print(f"  {invite}")
-        print(f"{'─'*60}\n")
-        input("Press Enter once the bot is in your server to continue ...")
-
-        # Verify guild membership
-        print("Guilds bot is in:")
-        bot_guilds = api(client, "GET", "/users/@me/guilds")
-        for g in bot_guilds:
-            marker = " ← MATCH" if g["id"] == guild else ""
-            print(f"  {g['id']}  {g['name']}{marker}")
-        if not any(g["id"] == guild for g in bot_guilds):
-            print(f"\n✗ Guild ID {guild} not in bot's guild list — wrong ID or bot not fully added.")
-            sys.exit(1)
-        print()
-
-        # Fetch channels and create webhooks
-        print(f"Fetching channels for guild {guild} ...")
-        all_channels = {c["name"]: c["id"] for c in api(client, "GET", f"/guilds/{guild}/channels") if c["type"] == 0}
-
-        results: dict[str, str] = {}
-        for name, var in CHANNELS.items():
-            if name not in all_channels:
-                print(f"  ⚠  #{name} not found — skipping {var}")
-                results[var] = ""
-                continue
-            wh = api(client, "POST", f"/channels/{all_channels[name]}/webhooks", json={"name": "amit-ai-team"})
-            results[var] = f"https://discord.com/api/webhooks/{wh['id']}/{wh['token']}"
-            print(f"  ✓  #{name}")
-
-    # Write config/discord.env via pathlib
-    cfg.parent.mkdir(parents=True, exist_ok=True)
-    cfg.write_text("\n".join([
-        "# Discord Webhook Configuration — generated by just discord-setup",
-        "# DO NOT COMMIT — this file is gitignored.",
-        "",
-        'DISCORD_USERNAME="amit-ai-team"',
-        "DISCORD_AVATAR_URL=",
-        "",
-        "# Activity",
-        f"DISCORD_WEBHOOK_UPDATES={results.get('DISCORD_WEBHOOK_UPDATES', '')}",
-        f"DISCORD_WEBHOOK_ALERTS={results.get('DISCORD_WEBHOOK_ALERTS', '')}",
-        "",
-        "# Specialist",
-        f"DISCORD_WEBHOOK_PM={results.get('DISCORD_WEBHOOK_PM', '')}",
-        f"DISCORD_WEBHOOK_DESIGN={results.get('DISCORD_WEBHOOK_DESIGN', '')}",
-        f"DISCORD_WEBHOOK_EXPLORATION={results.get('DISCORD_WEBHOOK_EXPLORATION', '')}",
-        f"DISCORD_WEBHOOK_ENGINEERING={results.get('DISCORD_WEBHOOK_ENGINEERING', '')}",
-        f"DISCORD_WEBHOOK_QA_STRATEGY={results.get('DISCORD_WEBHOOK_QA_STRATEGY', '')}",
-        f"DISCORD_WEBHOOK_QA_IMPLEMENTATION={results.get('DISCORD_WEBHOOK_QA_IMPLEMENTATION', '')}",
-        f"DISCORD_WEBHOOK_SECURITY={results.get('DISCORD_WEBHOOK_SECURITY', '')}",
-        f"DISCORD_WEBHOOK_PERFORMANCE={results.get('DISCORD_WEBHOOK_PERFORMANCE', '')}",
-        "",
-        "# Process",
-        f"DISCORD_WEBHOOK_DECISIONS={results.get('DISCORD_WEBHOOK_DECISIONS', '')}",
-        f"DISCORD_WEBHOOK_CICD={results.get('DISCORD_WEBHOOK_CICD', '')}",
-        "",
-    ]))
-
-    print(f"\n✓ Written to {cfg}")
-    print("Run 'just discord-status' to verify.")
+discord-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 {{justfile_directory()}}/scripts/discord_setup.py
 
 # Show Discord config status
 discord-status:
