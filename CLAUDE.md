@@ -1,43 +1,73 @@
-# AI Agent Team
+# Global Claude Rules
 
-Specialized agents for the full product and quality lifecycle. For broad requests use the Orchestrator first.
+> Applies to every repo. Repo-level `CLAUDE.md` overrides on conflict.
 
 ---
 
 ## Session Protocol
 
-### Start (always)
+### START (every session)
 1. If `memory/` or `.beads` missing → `ai memory-init`
-2. `bd ready --json` + `bd list --status in_progress --json` — see what's available and what's claimed
-3. Read `memory/CONTEXT.md`, predecessor's section in `memory/handoffs.md`, skim `open-questions.md` and last 5 `decisions.md` entries
+2. `bd ready --json` + `bd list --status in_progress --json`
+3. Read: `memory/CONTEXT.md` → your predecessor's section in `memory/handoffs.md` → skim `open-questions.md` → last 5 entries in `decisions.md`
 
-### End — Land the Plane (always)
+### END (every session — no exceptions)
 1. File `bd` tasks for remaining work; run quality gates
-2. `bd update <id> --status done`; create follow-up tasks with `bd dep add`
-3. `git pull --rebase && bd sync && git push` — work is not done until pushed
-4. Replace your section in `memory/handoffs.md` (≤15 lines); append to `decisions.md`; update `open-questions.md` and `CONTEXT.md` last-activity line
+2. `bd update <id> --status done`; add follow-ups via `bd dep add`
+3. `git pull --rebase && bd sync && git push` — **work is not done until pushed**
+4. Update `memory/handoffs.md` (your section, ≤15 lines), append `decisions.md`, update `open-questions.md` and `CONTEXT.md` last-activity line
 
-**NEVER** say "ready to push when you are" — you must push.
+**NEVER say "ready to push when you are." You must push.**
 
-### Beads Commands
+---
+
+## Beads (Task Tracker)
+
 ```bash
-bd ready --json                                            # start here
-bd list --status in_progress --json                        # check what's claimed
+bd ready --json                          # always start here
+bd list --status in_progress --json      # check claimed tasks
 bd create "Title" -p 1 --description "Recommended Agent: <name>\n..."
-bd update <id> --claim && bd update <id> --status done
+bd update <id> --claim
+bd update <id> --status done
 bd dep add <child> <parent>
 bd dep add <found> <source> --type discovered-from
-bd sync                                                    # before git push
+bd sync                                  # required before every git push
 ```
 
-### Beads Rules
-- `bd ready --json` before every session; `--json` for all programmatic output
-- Every task description must include `Recommended Agent: <name>`
-- Claim with `[Claimed by <agent> at <timestamp>]` in description; 10-min takeover rule applies
-- `bd sync` before `git push`; no markdown TODOs; no external trackers; planning docs in `history/`
+**Rules:** Always `--json` for programmatic output · Every task description must include `Recommended Agent: <name>` · Claim format: `[Claimed by <agent> at <timestamp>]` · 10-min takeover rule · No markdown TODOs · No external trackers · Planning docs go in `history/`
+
+---
+
+## Agent Team
+
+### Activation
+| Agent | When to use |
+|---|---|
+| `qa-team-orchestrator` | Broad "what needs testing?" or feature-level requests — **use first** |
+| `product-manager` | PRDs, feature definitions, success metrics |
+| `ui-ux-designer` | User flows, component specs, design tokens, a11y |
+| `exploratory-test-engineer` | Unknown app/feature — map before others work |
+| `staff-test-engineer` | Test strategy, risk prioritization, quality gates, testability |
+| `test-automation-architect` | Framework setup, shared abstractions, CI/CD test integration |
+| `devops-engineer` | CI/CD, IaC, Docker/K8s, environments, observability |
+| `backend-python` | FastAPI, SQLAlchemy 2.0, Pydantic v2, uv, async |
+| `junior-test-engineer` | Writing tests from specs, fixing flaky tests, bug reports |
+| `api-contract-test-engineer` | REST/GraphQL tests, Pact contracts, mocking strategy |
+| `security-test-engineer` | OWASP, auth/authz, scan triage |
+| `performance-stress-test-engineer` | Load/stress/spike/soak, k6, capacity planning |
+| `mobile-test-engineer` | iOS/Android automation, Appium, device strategy |
+| `memory-manager` | Cross-session knowledge, handoffs, decisions |
+
+### Default Sequence
+```
+PM → Designer → Explorer → DevOps → Architect → Staff
+  → Backend + API + Security + Perf + Mobile (parallel)
+  → Junior → Staff (final review)
+```
+Skip any step whose output already exists.
 
 ### Memory Read Map
-| Specialist | Read from handoffs.md |
+| Agent | Read from `handoffs.md` |
 |---|---|
 | `product-manager` | CONTEXT.md only |
 | `ui-ux-designer` | pm |
@@ -54,62 +84,46 @@ bd sync                                                    # before git push
 
 ---
 
-## Team
+## Standards
 
-| Specialist | Activate when |
+### Toolchain
+| Purpose | Tool | Never use |
+|---|---|---|
+| Python packages | `uv` | pip, poetry |
+| Python lint | `ruff` (line-length=120, double quotes) | — |
+| Python types | `ty` (Astral) | — |
+| JS/TS packages | `bun` | npm, yarn, pnpm |
+| Web UI | `vinext` (Cloudflare Next.js on Vite) | — |
+| Task runner | `just` (CI calls `just <target>`) | make |
+| Tool versions | `mise.toml` at repo root | — |
+| Search | `rg` | grep |
+| Web E2E | `stagehand` | — |
+| Performance | `k6` | — |
+| Contract | Pact | — |
+| Security SAST | Semgrep | — |
+| Security DAST | OWASP ZAP (staging only) | — |
+| Dependency scan | `osv-scanner` (CRITICAL = blocks merge) | — |
+| Image scan | `trivy` (HIGH/CRITICAL = fails CI) | — |
+
+### Code & Test Rules
+- Minimal code · DRY · atomic & independent tests · clean up in tearDown
+- Integration tests: real services via testcontainers/Compose — mocks in unit tests only
+- Docker: `--mount=type=cache` for all package layers
+- UI tests: `video/screenshot/trace: retain-on-failure` · produce UI Fix Suggestion before filing a bug
+- Git commits: short, imperative, ≤72 chars · **strip all AI footers** (Claude Code, Cursor, Co-authored-by)
+
+### Coverage Targets
+| Layer | Target |
 |---|---|
-| `qa-team-orchestrator` | Any broad "what do we need to test?" or feature-level request |
-| `product-manager` | Defining a feature, writing a PRD, prioritizing, defining success metrics |
-| `ui-ux-designer` | User flows, component specs, design tokens, accessibility |
-| `exploratory-test-engineer` | App/feature is unknown — map it before others can work |
-| `staff-test-engineer` | Test strategy, risk prioritization, quality gates, testability review |
-| `test-automation-architect` | Framework setup, shared abstractions, CI/CD test integration |
-| `devops-engineer` | CI/CD pipelines, IaC, Docker/K8s, environments, observability |
-| `backend-python` | FastAPI, SQLAlchemy 2.0, Pydantic v2, uv, async patterns |
-| `junior-test-engineer` | Writing tests from specs, fixing flaky tests, bug reports |
-| `api-contract-test-engineer` | REST/GraphQL tests, Pact contracts, mocking strategy |
-| `security-test-engineer` | OWASP checklist, auth/authz, scan triage |
-| `performance-stress-test-engineer` | Load/stress/spike/soak tests, k6, capacity planning |
-| `mobile-test-engineer` | iOS/Android automation, Appium, device strategy |
-| `memory-manager` | Cross-session knowledge, handoffs, decisions |
-
-### Default Sequencing
-PM → Designer → Explorer → DevOps → Architect → Staff → Backend+API+Security+Perf+Mobile (parallel) → Junior → Staff (final review)
-
-Skip any step where the output already exists.
-
----
-
-## Team Standards
-
-### Tools
-| Purpose | Tool |
-|---|---|
-| Python package manager | `uv` — never pip/poetry |
-| Python linting | `ruff` (line-length=120, double quotes) |
-| Python type checking | `ty` (Astral) |
-| JS/TS package manager | `bun` — never npm/yarn/pnpm |
-| Web UI framework | `vinext` (Cloudflare Next.js on Vite) |
-| Task runner | `just` — CI calls `just <target>` |
-| Tool versions | `mise.toml` at repo root |
-| Web E2E | Playwright |
-| Performance | k6 |
-| Contract | Pact |
-| Security SAST | Semgrep |
-| Security DAST | OWASP ZAP (staging only) |
-| Dependency scan | `osv-scanner` (CRITICAL blocks merge) |
-| Image scan | `trivy` (HIGH/CRITICAL fails CI) |
-| Search | `rg` — never grep |
-
-### Key Rules
-- Minimum code, DRY, atomic & independent tests, clean up in tearDown
-- Integration tests use real services (testcontainers/Compose) — mocks only in unit tests
-- Docker: `--mount=type=cache` for all package layers; uv for Python, bun for JS
-- UI tests: `video/screenshot/trace: retain-on-failure`; produce UI Fix Suggestion before filing a bug
-- Git commits: short, imperative, ≤72 chars — strip all AI footers (Claude Code, Cursor, Co-authored-by)
+| Unit | ≥ 80% |
+| Integration | 100% on critical paths |
+| E2E | All P0 user journeys |
+| Contract | All service boundaries |
 
 ### Severity
-P0 = outage/breach · P1 = major user impact · P2 = workaround exists · P3 = cosmetic
-
-### Coverage
-≥80% unit · 100% integration on critical paths · all P0 journeys in E2E · all service boundaries in contract
+| Level | Definition |
+|---|---|
+| P0 | Outage or security breach |
+| P1 | Major user impact, no workaround |
+| P2 | Workaround exists |
+| P3 | Cosmetic |
