@@ -8,15 +8,19 @@ r := `printf '\033[31m'`
 n := `printf '\033[0m'`
 
 home           := env_var("HOME")
-skills_src     := justfile_directory() / ".cursor/skills"
+skills_src     := justfile_directory() / "cursor/skills"
 skills_link    := home / ".cursor/skills"
-rules_src      := justfile_directory() / ".cursor/rules"
+rules_src      := justfile_directory() / "rules"
 rules_link     := home / ".cursor/rules"
+agents_src     := justfile_directory() / "agents"
+cursor_agents_link := home / ".cursor/agents"
+claude_agents_link := home / ".claude/agents"
+claude_rules_link  := home / ".claude/rules"
 claude_src      := justfile_directory() / "CLAUDE.md"
 claude_link     := home / ".claude/CLAUDE.md"
 settings_src    := justfile_directory() / "config/claude-settings.json"
 settings_link   := home / ".claude/settings.json"
-templates_src   := justfile_directory() / ".cursor/skills/memory-manager/templates"
+templates_src   := justfile_directory() / "agents/templates"
 discord_config  := justfile_directory() / "config/discord.env"
 
 # Show available commands
@@ -41,10 +45,13 @@ setup:
         echo "{{g}}✓{{n}} $dst → $src"
     }
 
-    symlink "{{skills_src}}"   "{{skills_link}}"
-    symlink "{{rules_src}}"    "{{rules_link}}"
-    symlink "{{claude_src}}"   "{{claude_link}}"
-    symlink "{{settings_src}}" "{{settings_link}}"
+    symlink "{{skills_src}}"         "{{skills_link}}"
+    symlink "{{rules_src}}"          "{{rules_link}}"
+    symlink "{{rules_src}}"          "{{claude_rules_link}}"
+    symlink "{{agents_src}}"         "{{cursor_agents_link}}"
+    symlink "{{agents_src}}"         "{{claude_agents_link}}"
+    symlink "{{claude_src}}"         "{{claude_link}}"
+    symlink "{{settings_src}}"       "{{settings_link}}"
 
     alias_line="alias ai='just -f {{justfile()}}'"
     if grep -qF "$alias_line" "$HOME/.zshrc" 2>/dev/null; then
@@ -222,10 +229,13 @@ status:
             echo "{{r}}✗{{n}} $label: $link is not a symlink — run: just setup"
         fi
     }
-    check "Cursor skills"   "{{skills_link}}"   "{{skills_src}}"
-    check "Cursor rules"    "{{rules_link}}"    "{{rules_src}}"
-    check "CLAUDE.md"       "{{claude_link}}"   "{{claude_src}}"
-    check "Claude settings" "{{settings_link}}" "{{settings_src}}"
+    check "Cursor skills"      "{{skills_link}}"          "{{skills_src}}"
+    check "Cursor rules"       "{{rules_link}}"           "{{rules_src}}"
+    check "Cursor agents"      "{{cursor_agents_link}}"   "{{agents_src}}"
+    check "Claude rules"       "{{claude_rules_link}}"    "{{rules_src}}"
+    check "Claude agents"      "{{claude_agents_link}}"   "{{agents_src}}"
+    check "CLAUDE.md"          "{{claude_link}}"          "{{claude_src}}"
+    check "Claude settings"    "{{settings_link}}"        "{{settings_src}}"
 
 # ── Discord Notifications ─────────────────────────────────────────────────────
 # Config: copy config/discord.env.example → config/discord.env and fill in webhooks.

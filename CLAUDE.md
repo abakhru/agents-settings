@@ -1,6 +1,81 @@
-# Global Claude Rules
+# CLAUDE.md
 
-> Applies to every repo. Repo-level `CLAUDE.md` overrides on conflict.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> This file does double duty: it is the repo-level guide for developing **agent-settings** itself,
+> AND it is symlinked to `~/.claude/CLAUDE.md` to serve as the global Claude config for all projects.
+> Repo-level `CLAUDE.md` in other projects overrides these rules on conflict.
+
+---
+
+## This Repo — agent-settings
+
+Personal AI config repository. All agents, rules, commands, and settings live here and are
+installed into Cursor and Claude CLI via symlinks managed by `just`.
+
+### Key Commands
+
+```bash
+just setup          # first-time machine setup — creates all symlinks, adds 'ai' alias to ~/.zshrc
+just status         # verify all symlinks are correct
+just --list         # show all available targets
+
+# From any directory (after setup adds the alias):
+ai memory-init      # init memory/ + Beads (bd) task graph in current project
+ai memory-status    # show memory status of current project
+ai tasks            # list unblocked bd tasks
+ai task "Title" 1   # create a task (priority 0–3)
+ai claim <id>       # claim a task before starting
+ai done <id>        # mark task complete and show what's next
+ai notify "msg"     # send Discord notification
+ai alert "msg"      # send Discord alert
+```
+
+### Symlink Architecture
+
+`just setup` creates these symlinks (managed in `justfile`):
+
+| Source (this repo)  | Destination                  |
+|---------------------|------------------------------|
+| `agents/`           | `~/.cursor/agents/`          |
+| `agents/`           | `~/.claude/agents/`          |
+| `rules/`            | `~/.cursor/rules/`           |
+| `rules/`            | `~/.claude/rules/`           |
+| `CLAUDE.md`         | `~/.claude/CLAUDE.md`        |
+| `config/claude-settings.json` | `~/.claude/settings.json` |
+
+Cursor skills (`cursor/skills/`) are also symlinked to `~/.cursor/skills/`.
+
+### Adding New Agents
+
+Drop a `.md` file in `agents/`. It is immediately live in both Cursor and Claude CLI via the symlink.
+Register it in `AGENTS.md` (this repo) for discoverability. Follow the existing agent format.
+
+### Adding New Rules
+
+Drop a `.md` file in `rules/common/` (applies everywhere) or `rules/<language>/` (language-scoped).
+Rules are always-on — they load automatically in every session.
+
+### Adding New Commands (Slash Commands)
+
+Drop a `.md` file in `commands/`. Commands appear in Claude CLI as `/command-name`.
+
+### Discord Setup
+
+```bash
+cp config/discord.env.example config/discord.env
+# Fill in webhook URLs, then:
+ai notify "AI team online"
+```
+
+### Memory Init for a New Project
+
+```bash
+cd /path/to/project
+ai memory-init
+# Edit memory/CONTEXT.md with project name, tech stack, goals
+bd create "First task" -p 1
+```
 
 ---
 
@@ -54,7 +129,7 @@ bd sync                                  # required before every git push
 | `junior-test-engineer` | Writing tests from specs, fixing flaky tests, bug reports |
 | `api-contract-test-engineer` | REST/GraphQL tests, Pact contracts, mocking strategy |
 | `security-test-engineer` | OWASP, auth/authz, scan triage |
-| `performance-stress-test-engineer` | Load/stress/spike/soak, k6, capacity planning |
+| `perf-test-engineer` | Load/stress/spike/soak, k6, capacity planning |
 | `mobile-test-engineer` | iOS/Android automation, Appium, device strategy |
 | `memory-manager` | Cross-session knowledge, handoffs, decisions |
 
@@ -78,7 +153,7 @@ Skip any step whose output already exists.
 | `backend-python` | staff, architect |
 | `api-contract-test-engineer` | explorer, architect |
 | `security-test-engineer` | explorer, architect |
-| `performance-stress-test-engineer` | explorer, architect |
+| `perf-test-engineer` | explorer, architect |
 | `mobile-test-engineer` | explorer, designer, architect |
 | `junior-test-engineer` | staff, architect, explorer |
 
