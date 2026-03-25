@@ -8,3 +8,4 @@ config/discord.env
 .DS_Store
 uv.lock
 .vscode/
+discord.env
