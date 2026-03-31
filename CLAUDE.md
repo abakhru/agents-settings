@@ -81,7 +81,8 @@ bd create "First task" -p 1
 
 ## Session Protocol
 
-### START (every session)
+### Start (always)
+0. For any file search or grep in the current git indexed directory use fff tools
 1. If `memory/` or `.beads` missing → `ai memory-init`
 2. `bd ready --json` + `bd list --status in_progress --json`
 3. Read: `memory/CONTEXT.md` → your predecessor's section in `memory/handoffs.md` → skim `open-questions.md` → last 5 entries in `decisions.md`
@@ -187,18 +188,10 @@ Skip any step whose output already exists.
 - UI tests: `video/screenshot/trace: retain-on-failure` · produce UI Fix Suggestion before filing a bug
 - Git commits: short, imperative, ≤72 chars · **strip all AI footers** (Claude Code, Cursor, Co-authored-by)
 
-### Coverage Targets
-| Layer | Target |
-|---|---|
-| Unit | ≥ 80% |
-| Integration | 100% on critical paths |
-| E2E | All P0 user journeys |
-| Contract | All service boundaries |
-
 ### Severity
-| Level | Definition |
-|---|---|
-| P0 | Outage or security breach |
-| P1 | Major user impact, no workaround |
-| P2 | Workaround exists |
-| P3 | Cosmetic |
+P0 = outage/breach · P1 = major user impact · P2 = workaround exists · P3 = cosmetic
+
+### Coverage
+≥80% unit · 100% integration on critical paths · all P0 journeys in E2E · all service boundaries in contract
+
+@RTK.md
